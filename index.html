@@ -1,71 +1,238 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b0f14">
-  <title>INVISOL Connect</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INVISOL — Solar Monitor BLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="./manifest.webmanifest">
+<style>
+:root{
+  --bg-primary:#0b0f14;--bg-secondary:#101826;--bg-card:#141e2d;--bg-card-hover:#1b2638;
+  --border:#24344d;--border-glow:#f6b73c40;
+  --text-primary:#f1f5f9;--text-secondary:#b3c0d4;--text-muted:#7e8ba3;
+  --accent-blue:#38bdf8;--accent-cyan:#22d3ee;--accent-green:#22c55e;
+  --accent-amber:#f6b73c;--accent-red:#f87171;--accent-purple:#a78bfa;--accent-orange:#fb923c;
+  --glow-blue:0 0 20px #38bdf840,0 0 60px #38bdf815;
+  --glow-green:0 0 20px #22c55e40,0 0 60px #22c55e15;
+  --mono:'IBM Plex Mono',monospace;--sans:'Space Grotesk',sans-serif;
+  --radius:14px;--radius-sm:10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:14px;}
+body{font-family:var(--sans);background:var(--bg-primary);color:var(--text-primary);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background:
+  radial-gradient(ellipse 60% 40% at 18% 12%,#f6b73c0e 0%,transparent 70%),
+  radial-gradient(ellipse 40% 30% at 80% 8%,#38bdf810 0%,transparent 70%),
+  radial-gradient(ellipse 50% 40% at 70% 90%,#22c55e0a 0%,transparent 70%);
+  pointer-events:none;z-index:0;}
+::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+.header{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--bg-secondary);border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent-cyan),var(--accent-blue));border-radius:10px;display:grid;place-items:center;font-weight:900;font-size:16px;color:#fff;box-shadow:var(--glow-blue);}
+.logo-text{font-size:20px;font-weight:800;letter-spacing:-0.5px;background:linear-gradient(135deg,#fff,var(--accent-cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.logo-sub{font-size:11px;color:var(--text-muted);}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.status-indicator{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;}
+.status-dot{width:10px;height:10px;border-radius:50%;background:var(--accent-red);transition:all 0.3s;}
+.status-dot.connected{background:var(--accent-green);box-shadow:var(--glow-green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 #10b98140;}50%{box-shadow:0 0 0 6px #10b98100;}}
+.clock{font-family:var(--mono);font-size:12px;color:var(--text-muted);}
+
+.tab-bar{display:flex;gap:2px;padding:0 24px;background:var(--bg-secondary);border-bottom:1px solid var(--border);overflow-x:auto;}
+.tab-btn{padding:10px 20px;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text-muted);background:transparent;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;white-space:nowrap;}
+.tab-btn:hover{color:var(--text-secondary);}
+.tab-btn.active{color:var(--accent-cyan);border-bottom-color:var(--accent-cyan);}
+.tab-content{display:none;}.tab-content.active{display:block;}
+
+.main{position:relative;z-index:1;padding:20px 24px;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.card:hover{border-color:var(--border-glow);}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);}
+.card-header .badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;background:var(--accent-blue);color:#fff;}
+.card-body{padding:18px;}
+
+.connect-panel{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-group label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);}
+select,input[type="number"],input[type="text"]{font-family:var(--mono);font-size:13px;padding:8px 12px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);outline:none;}
+select:focus,input:focus{border-color:var(--accent-cyan);}
+select{cursor:pointer;}
+
+.btn{font-family:var(--sans);font-size:13px;font-weight:600;padding:8px 20px;border:none;border-radius:var(--radius-sm);cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;}
+.btn-primary{background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));color:#fff;box-shadow:0 2px 12px #3b82f630;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px #3b82f640;}
+.btn-danger{background:var(--accent-red);color:#fff;}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-secondary);}
+.btn-outline:hover{border-color:var(--accent-cyan);color:var(--accent-cyan);}
+.btn-sm{padding:6px 14px;font-size:12px;}
+.btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+.metric{padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;}
+.metric::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.metric.blue::before{background:linear-gradient(90deg,var(--accent-blue),var(--accent-cyan));}
+.metric.green::before{background:linear-gradient(90deg,var(--accent-green),#34d399);}
+.metric.amber::before{background:linear-gradient(90deg,var(--accent-amber),var(--accent-orange));}
+.metric.red::before{background:linear-gradient(90deg,var(--accent-red),#f87171);}
+.metric.purple::before{background:linear-gradient(90deg,var(--accent-purple),#a78bfa);}
+.metric.cyan::before{background:linear-gradient(90deg,var(--accent-cyan),#22d3ee);}
+.metric-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px;}
+.metric-value{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--text-primary);line-height:1;}
+.metric-unit{font-size:14px;font-weight:400;color:var(--text-muted);margin-left:4px;}
+.metric-sub{font-size:11px;color:var(--text-muted);margin-top:6px;font-family:var(--mono);}
+
+.mode-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:var(--radius-sm);font-family:var(--mono);font-size:14px;font-weight:600;}
+.mode-L{background:#10b98120;color:var(--accent-green);border:1px solid #10b98140;}
+.mode-B{background:#f59e0b20;color:var(--accent-amber);border:1px solid #f59e0b40;}
+.mode-S{background:#6b728020;color:#9ca3af;border:1px solid #6b728040;}
+.mode-F{background:#ef444420;color:var(--accent-red);border:1px solid #ef444440;}
+.mode-P{background:#3b82f620;color:var(--accent-blue);border:1px solid #3b82f640;}
+.mode-H{background:#8b5cf620;color:var(--accent-purple);border:1px solid #8b5cf640;}
+
+.status-bar{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;}
+.status-chip{font-size:11px;font-weight:500;font-family:var(--mono);padding:4px 10px;border-radius:4px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-muted);}
+.status-chip.active{background:#10b98115;border-color:#10b98140;color:var(--accent-green);}
+
+.console-output{background:#050a14;border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;max-height:400px;overflow-y:auto;font-family:var(--mono);font-size:12px;line-height:1.8;}
+.console-line{display:flex;gap:8px;padding:2px 0;border-bottom:1px solid #111827;}
+.console-ts{color:var(--text-muted);flex-shrink:0;}
+.console-dir{font-weight:700;width:24px;text-align:center;}
+.console-dir.tx{color:var(--accent-cyan);}.console-dir.rx{color:var(--accent-green);}.console-dir.err{color:var(--accent-red);}
+.console-data{color:var(--text-primary);word-break:break-all;}
+
+.settings-nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;}
+.settings-nav-btn{font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border:1px solid var(--border);border-radius:20px;background:transparent;color:var(--text-muted);cursor:pointer;transition:all 0.2s;}
+.settings-nav-btn:hover{border-color:var(--text-secondary);color:var(--text-secondary);}
+.settings-nav-btn.active{background:var(--accent-cyan);border-color:var(--accent-cyan);color:#fff;}
+.setting-group{display:none;}.setting-group.active{display:block;}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;transition:background 0.2s;flex-wrap:wrap;gap:8px;}
+.setting-row:hover{background:var(--bg-card-hover);}
+.setting-info{flex:1;min-width:200px;}
+.setting-cmd{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent-cyan);margin-bottom:2px;}
+.setting-desc{font-size:13px;color:var(--text-secondary);}
+.setting-controls{display:flex;align-items:center;gap:8px;}
+
+.warning-item{padding:6px 12px;border-radius:4px;font-size:12px;font-family:var(--mono);margin-bottom:4px;}
+.warning-item.active{background:#ef444420;color:var(--accent-red);border:1px solid #ef444430;}
+.warning-item.ok{background:#10b98110;color:#10b98180;}
+
+.bms-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;}
+.bms-item{padding:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);}
+.bms-item .label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px;}
+.bms-item .value{font-size:12px;font-weight:600;color:var(--text-primary);margin-top:4px;}
+
+.no-data-overlay{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--text-muted);text-align:center;}
+.no-data-icon{font-size:48px;margin-bottom:16px;opacity:0.3;}
+
+.flow-card{position:relative;overflow:hidden;}
+.flow-canvas{position:relative;height:360px;border-radius:var(--radius);background:linear-gradient(135deg,#0f172a 0%,#0b1220 60%,#0b0f14 100%);border:1px solid var(--border);}
+.flow-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+.flow-line{stroke:var(--border);stroke-width:2.2;stroke-dasharray:8 8;opacity:0.6;transition:all 0.4s ease;}
+.flow-line.active{stroke:var(--accent-amber);stroke-dasharray:none;opacity:1;filter:drop-shadow(0 0 8px #f6b73c66);}
+.flow-line.green.active{stroke:var(--accent-green);filter:drop-shadow(0 0 8px #22c55e66);}
+.flow-line.blue.active{stroke:var(--accent-blue);filter:drop-shadow(0 0 8px #38bdf866);}
+.flow-node{position:absolute;top:var(--y);left:var(--x);transform:translate(-50%,-50%);background:rgba(15,23,42,0.9);border:1px solid var(--border);border-radius:14px;padding:12px 14px;min-width:150px;text-align:left;cursor:pointer;transition:all 0.2s ease;backdrop-filter:blur(8px);}
+.flow-node:hover{border-color:var(--accent-amber);transform:translate(-50%,-50%) scale(1.02);}
+.flow-node.active{border-color:var(--accent-amber);box-shadow:0 0 18px #f6b73c40;}
+.flow-node .title{font-size:11px;letter-spacing:0.4px;text-transform:uppercase;color:var(--text-muted);font-weight:600;}
+.flow-node .value{font-family:var(--mono);font-size:20px;font-weight:600;margin-top:6px;}
+.flow-node .sub{font-size:11px;color:var(--text-secondary);margin-top:4px;font-family:var(--mono);}
+.flow-node .pill{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:2px 8px;border-radius:999px;font-size:10px;background:rgba(56,189,248,0.15);color:var(--accent-blue);}
+
+.detail-panel{margin-top:16px;padding:16px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-card);}
+.detail-title{font-size:14px;font-weight:600;letter-spacing:0.3px;color:var(--text-secondary);text-transform:uppercase;}
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:12px;}
+.detail-item{padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:#0f172a;}
+.detail-item .label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px;}
+.detail-item .val{font-family:var(--mono);font-size:14px;margin-top:6px;}
+
+@keyframes slideValue{from{opacity:0.5;}to{opacity:1;}}
+.value-update{animation:slideValue 0.3s ease-out;}
+
+@media(max-width:1200px){.grid-4{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:768px){
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}
+  .flow-canvas{height:420px;}
+  .flow-node{min-width:110px;padding:9px 10px;}
+  .flow-node .value{font-size:18px;}
+  .flow-node .sub{font-size:10px;}
+  .flow-node[data-node="pv"]{--x:24%;--y:24%;}
+  .flow-node[data-node="grid"]{--x:76%;--y:24%;}
+  .flow-node[data-node="inverter"]{--x:50%;--y:50%;min-width:140px;}
+  .flow-node[data-node="battery"]{--x:25%;--y:76%;}
+  .flow-node[data-node="home"]{--x:75%;--y:76%;}
+  .main{padding:16px 12px;}
+  .tab-btn{padding:10px 14px;font-size:12px;}
+}
+</style>
 </head>
 <body>
 
 <header class="header">
   <div class="logo">
     <div class="logo-icon">&#9889;</div>
-    <div><div class="logo-text">INVISOL</div><div class="logo-sub">Solar Monitor — BLE Cloud</div></div>
+    <div><div class="logo-text">INVISOL</div><div class="logo-sub">Inverter + BMS Monitor — BLE</div></div>
   </div>
   <div class="header-right">
     <div class="status-indicator"><div class="status-dot" id="statusDot"></div><span id="statusText">Disconnected</span></div>
     <div class="clock" id="clock"></div>
-    <button id="installBtn" class="btn btn-outline btn-sm" hidden>Install App</button>
-    <button id="softapBtn" class="btn btn-outline btn-sm">192.168.4.1</button>
-    <button id="connectBtn" class="btn btn-primary">Connect BLE</button>
+    <button class="btn btn-outline btn-sm" id="installBtn" hidden>Install App</button>
+    <button class="btn btn-outline btn-sm" onclick="window.open('http://192.168.4.1','_blank')">192.168.4.1</button>
+    <button class="btn btn-primary" id="connectBtn">Connect BLE</button>
   </div>
 </header>
 
 <nav class="tab-bar">
   <button class="tab-btn active" data-tab="connection">Connection</button>
-  <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="dashboard">Overview</button>
   <button class="tab-btn" data-tab="battery">Battery / BMS</button>
-  <button class="tab-btn" data-tab="commands">Commands</button>
+  <button class="tab-btn" data-tab="commands">Command Center</button>
   <button class="tab-btn" data-tab="settings">Settings</button>
   <button class="tab-btn" data-tab="logs">Logs</button>
 </nav>
 
 <div class="main">
 
-<!-- ═══════════════ CONNECTION ═══════════════ -->
+<!-- CONNECTION -->
 <div class="tab-content active" id="tab-connection">
-  <div class="card" style="max-width:660px;margin:40px auto;">
+  <div class="card" style="max-width:700px;margin:40px auto;">
     <div class="card-header">BLE Connection <span class="badge" id="connBadge">OFFLINE</span></div>
     <div class="card-body">
-      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Connect to <strong>SOLAR_ESP</strong> via Web Bluetooth. Requires Chrome or Edge on Android/Desktop.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+      <div class="connect-panel" style="margin-bottom:16px;">
         <button class="btn btn-primary" id="connectBtn2">Connect BLE</button>
-        <button class="btn btn-outline" onclick="window.open('http://192.168.4.1','_blank')">Open SoftAP (192.168.4.1)</button>
+        <button class="btn btn-outline" onclick="window.open('http://192.168.4.1','_blank')">Open SoftAP</button>
+        <button class="btn btn-outline btn-sm" id="refreshBtn">&#8635; Refresh</button>
       </div>
-      <div style="padding:14px;background:var(--bg-primary);border-radius:var(--radius-sm);border:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:2.2;">
-        Device: <span style="color:var(--accent-cyan);">SOLAR_ESP</span> &nbsp;|&nbsp;
-        Service: <span style="color:var(--accent-cyan);">0xFFF0</span> &nbsp;|&nbsp;
-        CMD: <span style="color:var(--accent-cyan);">0xFFF1</span> (Write) &nbsp;|&nbsp;
-        TX: <span style="color:var(--accent-cyan);">0xFFF2</span> (Notify)
+      <div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);font-family:var(--mono);">
+        Device: SOLAR_ESP &nbsp;|&nbsp; Service: 0xFFF0 &nbsp;|&nbsp; CMD: 0xFFF1 (Write) &nbsp;|&nbsp; TX: 0xFFF2 (Notify)
       </div>
-      <div id="bleLog" class="console-output" style="margin-top:14px;max-height:200px;"></div>
+      <div style="padding:14px;background:var(--bg-primary);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">How to Connect</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:2;">
+          1. Open in <span style="color:var(--accent-cyan);">Chrome or Edge</span> on Android/Desktop<br>
+          2. Click <span style="color:var(--accent-cyan);">Connect BLE</span> and select <span style="color:var(--accent-cyan);">SOLAR_ESP</span><br>
+          3. Data auto-polls every 1.5s after connection<br>
+          No internet? Connect to ESP Wi-Fi &rarr; open <span style="color:var(--accent-cyan);">192.168.4.1</span>
+        </div>
+      </div>
+      <div id="bleLog" class="console-output" style="max-height:220px;"></div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════ DASHBOARD ═══════════════ -->
+<!-- DASHBOARD -->
 <div class="tab-content" id="tab-dashboard">
-  <div id="dashNoData" class="no-data-overlay"><div class="no-data-icon">&#128225;</div><div>No Data — Connect BLE first</div></div>
+  <div id="dashNoData" class="no-data-overlay"><div class="no-data-icon">&#128225;</div><div>No Telemetry — Connect BLE first</div></div>
   <div id="dashData" style="display:none;">
-
-    <!-- Energy Flow -->
     <div class="card flow-card" style="margin-bottom:16px;">
-      <div class="card-header">Energy Flow <span class="badge" id="flowBadge">LIVE</span></div>
+      <div class="card-header">Energy Flow <span class="badge" id="flowStatus">LIVE</span></div>
       <div class="card-body">
         <div class="flow-canvas" id="flowCanvas">
           <svg class="flow-lines" viewBox="0 0 1000 400" preserveAspectRatio="none">
@@ -75,192 +242,160 @@
             <path id="flowLineHome" class="flow-line"       d="M500,200 L800,300"></path>
           </svg>
           <div class="flow-node" data-node="pv"       style="--x:18%;--y:25%;"><div class="title">Solar</div><div class="value"><span id="flow_pv_w">&#8212;</span> W</div><div class="sub"><span id="flow_pv_v">&#8212;</span> V &bull; <span id="flow_pv_a">&#8212;</span> A</div></div>
-          <div class="flow-node" data-node="grid"     style="--x:82%;--y:25%;"><div class="title">Grid</div><div class="value"><span id="flow_grid_v">&#8212;</span> V</div><div class="sub"><span id="flow_grid_hz">&#8212;</span> Hz</div></div>
-          <div class="flow-node" data-node="inverter" style="--x:50%;--y:50%;"><div class="title">Inverter</div><div class="value"><span id="flow_mode">&#8212;</span></div><div class="pill"><span id="flow_load">&#8212;</span>% Load</div></div>
+          <div class="flow-node" data-node="grid"     style="--x:82%;--y:25%;"><div class="title">Grid</div><div class="value"><span id="flow_grid_v">&#8212;</span> V</div><div class="sub"><span id="flow_grid_f">&#8212;</span> Hz</div></div>
+          <div class="flow-node" data-node="inverter" style="--x:50%;--y:50%;"><div class="title">Inverter</div><div class="value"><span id="flow_mode">&#8212;</span></div><div class="pill"><span id="flow_load_pct">&#8212;</span>% Load</div></div>
           <div class="flow-node" data-node="battery"  style="--x:20%;--y:75%;"><div class="title">Battery</div><div class="value"><span id="flow_bat_v">&#8212;</span> V</div><div class="sub"><span id="flow_bat_soc">&#8212;</span>% SOC</div></div>
-          <div class="flow-node" data-node="home"     style="--x:80%;--y:75%;"><div class="title">Home</div><div class="value"><span id="flow_out_w">&#8212;</span> W</div><div class="sub">Output</div></div>
+          <div class="flow-node" data-node="home"     style="--x:80%;--y:75%;"><div class="title">Home</div><div class="value"><span id="flow_home_w">&#8212;</span> W</div><div class="sub">Output</div></div>
         </div>
-        <div class="detail-panel"><div class="detail-title" id="flowDetailsTitle">Click a node for details</div><div class="detail-grid" id="flowDetailsGrid"></div></div>
+        <div class="detail-panel" id="flowDetails">
+          <div class="detail-title" id="flowDetailsTitle">Inverter Details</div>
+          <div class="detail-grid" id="flowDetailsGrid"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Mode + Warnings -->
     <div class="grid-2" style="margin-bottom:16px;">
-      <div class="card"><div class="card-header">Inverter Mode</div><div class="card-body" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-        <div class="mode-badge mode-S" id="modeBadge"><span id="modeIcon">&#9211;</span> <span id="modeText">&#8212;</span></div>
+      <div class="card"><div class="card-header">Inverter Mode</div><div class="card-body" style="display:flex;align-items:center;gap:16px;">
+        <div class="mode-badge mode-S" id="modeBadge"><span id="modeIcon">&#9211;</span><span id="modeText">&#8212;</span></div>
         <div style="flex:1;"><div class="status-bar" id="statusFlags"></div></div>
       </div></div>
-      <div class="card"><div class="card-header">Warnings <span class="badge" id="warningCount">0</span></div><div class="card-body"><div id="warningList"><div class="warning-item ok">&#10003; No active warnings</div></div></div></div>
+      <div class="card"><div class="card-header">Warnings <span class="badge" id="warningCount">0</span></div><div class="card-body"><div id="warningList"><div class="warning-item ok">No active warnings</div></div></div></div>
     </div>
 
-    <!-- Grid + Output -->
     <div class="grid-4" style="margin-bottom:16px;">
-      <div class="metric blue"><div class="metric-label">Grid Voltage</div><div class="metric-value"><span id="m_grid_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_grid_hz">&#8212;</span> Hz</div></div>
-      <div class="metric cyan"><div class="metric-label">Output Voltage</div><div class="metric-value"><span id="m_out_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_out_hz">&#8212;</span> Hz</div></div>
-      <div class="metric amber"><div class="metric-label">Output Power</div><div class="metric-value"><span id="m_out_w">&#8212;</span><span class="metric-unit">W</span></div><div class="metric-sub"><span id="m_out_va">&#8212;</span> VA &nbsp;|&nbsp; <span id="m_load_pct">&#8212;</span>%</div></div>
+      <div class="metric blue"><div class="metric-label">Grid Voltage</div><div class="metric-value"><span id="m_grid_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_grid_f">&#8212;</span> Hz</div></div>
+      <div class="metric cyan"><div class="metric-label">Output Voltage</div><div class="metric-value"><span id="m_out_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_out_f">&#8212;</span> Hz</div></div>
+      <div class="metric amber"><div class="metric-label">Output Power</div><div class="metric-value"><span id="m_out_w">&#8212;</span><span class="metric-unit">W</span></div><div class="metric-sub"><span id="m_out_va">&#8212;</span> VA | <span id="m_load_pct">&#8212;</span>%</div></div>
       <div class="metric purple"><div class="metric-label">Bus Voltage</div><div class="metric-value"><span id="m_bus_v">&#8212;</span><span class="metric-unit">V</span></div></div>
     </div>
-
-    <!-- Battery + Charge -->
     <div class="grid-4" style="margin-bottom:16px;">
       <div class="metric green"><div class="metric-label">Battery Voltage</div><div class="metric-value"><span id="m_bat_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub">SCC: <span id="m_bat_scc">&#8212;</span> V</div></div>
-      <div class="metric green"><div class="metric-label">Battery SOC</div><div class="metric-value"><span id="m_bat_soc">&#8212;</span><span class="metric-unit">%</span></div></div>
-      <div class="metric cyan"><div class="metric-label">Charge / Discharge</div><div class="metric-value"><span id="m_chg_a">&#8212;</span><span class="metric-unit">A</span></div><div class="metric-sub">Dis: <span id="m_dis_a">&#8212;</span> A</div></div>
-      <div class="metric red"><div class="metric-label">Inverter Temp</div><div class="metric-value"><span id="m_inv_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+      <div class="metric green"><div class="metric-label">Battery Capacity</div><div class="metric-value"><span id="m_bat_cap">&#8212;</span><span class="metric-unit">%</span></div></div>
+      <div class="metric cyan"><div class="metric-label">Charge Current</div><div class="metric-value"><span id="m_chg_a">&#8212;</span><span class="metric-unit">A</span></div><div class="metric-sub">Discharge: <span id="m_dis_a">&#8212;</span> A</div></div>
+      <div class="metric red"><div class="metric-label">Temperature</div><div class="metric-value"><span id="m_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
     </div>
-
-    <!-- PV -->
     <div class="grid-4" style="margin-bottom:16px;">
       <div class="metric amber"><div class="metric-label">PV Voltage</div><div class="metric-value"><span id="m_pv_v">&#8212;</span><span class="metric-unit">V</span></div></div>
       <div class="metric amber"><div class="metric-label">PV Current</div><div class="metric-value"><span id="m_pv_a">&#8212;</span><span class="metric-unit">A</span></div></div>
       <div class="metric amber"><div class="metric-label">PV Power</div><div class="metric-value"><span id="m_pv_w">&#8212;</span><span class="metric-unit">W</span></div></div>
-      <div class="metric blue"><div class="metric-label">Last Update</div><div class="metric-value" style="font-size:16px;"><span id="m_ts">&#8212;</span></div></div>
+      <div class="metric blue"><div class="metric-label">Last Update</div><div class="metric-value" style="font-size:16px;"><span id="m_timestamp">&#8212;</span></div></div>
     </div>
-
   </div>
 </div>
 
-<!-- ═══════════════ BATTERY / BMS ═══════════════ -->
+<!-- BATTERY -->
 <div class="tab-content" id="tab-battery">
-  <div id="bmsNoData" class="no-data-overlay"><div class="no-data-icon">&#128267;</div><div>No BMS Data — Connect BLE first</div></div>
+  <div id="bmsNoData" class="no-data-overlay"><div class="no-data-icon">&#128267;</div><div>No BMS Data &#8212; Waiting for BMS broadcast</div></div>
   <div id="bmsData" style="display:none;">
-
     <div class="grid-2" style="margin-bottom:16px;">
-      <!-- BMS Status -->
-      <div class="card"><div class="card-header">BMS Status <span class="badge" id="bmsBadge">OFFLINE</span></div><div class="card-body">
-        <div class="status-indicator" style="margin-bottom:10px;"><div class="status-dot" id="bmsDot"></div><span id="bmsStatusText">No Data</span></div>
-        <div style="font-family:var(--mono);font-size:12px;color:var(--text-muted);margin-bottom:10px;">Frames: <span id="bmsFrameCount">0</span> &nbsp;&bull;&nbsp; Last: <span id="bmsTimestamp">&#8212;</span></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <button class="btn btn-primary btn-sm" id="bmsPollBtn" onclick="toggleBmsPoll()">&#9654; Auto-Poll ON</button>
-          <button class="btn btn-outline btn-sm" onclick="manualBmsQuery()" id="bmsManualBtn">Query Now (#H0)</button>
-          <span style="font-size:11px;color:var(--text-muted);font-family:var(--mono);" id="bmsPollStatus">Polling every 2s</span>
-        </div>
-        <div class="status-bar" id="bmsFlags"></div>
-      </div></div>
-
-      <!-- BMS Command Center -->
-      <div class="card"><div class="card-header">BMS Command Center</div><div class="card-body">
-        <div class="form-group" style="margin-bottom:10px;"><label>Preset Command</label>
-          <select id="bmsCmdSelect" onchange="onBmsCmdSelect()" style="width:100%;"></select>
-        </div>
-        <div id="bmsCmdDesc" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-family:var(--mono);min-height:16px;"></div>
-        <div class="form-group" style="margin-bottom:8px;"><label>Value (decimal or hex)</label>
-          <input type="text" id="bmsCmdValue" placeholder="e.g. 16 or 0x0010" oninput="buildBmsHex()">
-        </div>
-        <div class="form-group" style="margin-bottom:10px;"><label>Hex Frame (CRC appended by firmware)</label>
-          <input type="text" id="bmsCmdHex" readonly style="color:var(--accent-cyan);">
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="sendBmsPreset()" id="bmsSendBtn" style="margin-bottom:14px;">Send &#9654;</button>
-
-        <div style="border-top:1px solid var(--border);padding-top:12px;">
-          <div class="form-group" style="margin-bottom:8px;"><label>Quick ASCII</label>
-            <div style="display:flex;gap:8px;">
-              <input type="text" id="bmsAsciiInput" placeholder="#H0" style="flex:1;">
-              <button class="btn btn-primary btn-sm" onclick="sendBmsAsciiCmd()">Send</button>
-            </div>
+      <div class="card">
+        <div class="card-header">BMS Status <span class="badge" id="bmsBadge">OFFLINE</span></div>
+        <div class="card-body">
+          <div class="status-indicator" style="margin-bottom:10px;"><div class="status-dot" id="bmsDot"></div><span id="bmsStatusText">No Data</span></div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text-muted);margin-bottom:8px;">Last: <span id="bmsTimestamp">&#8212;</span> &bull; Frames: <span id="bmsFrameCount">0</span></div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-primary btn-sm" id="bmsPollToggle" onclick="toggleBmsPoll()">&#9654; Auto-Poll ON</button>
+            <button class="btn btn-outline btn-sm" onclick="manualBmsQuery()" id="bmsManualQueryBtn">Query Now (#H0)</button>
+            <span style="font-size:11px;color:var(--text-muted);font-family:var(--mono);" id="bmsPollStatus">Polling every 2s</span>
           </div>
-          <div class="form-group" style="margin-bottom:8px;"><label>Custom Hex (space-sep)</label>
-            <div style="display:flex;gap:8px;">
-              <input type="text" id="bmsHexInput" placeholder="02 06 9B 4C 00 01" style="flex:1;">
-              <button class="btn btn-primary btn-sm" onclick="sendBmsHexCmd()">Send</button>
-            </div>
-          </div>
-        </div>
-        <div id="bmsCmdResponse" class="console-output" style="margin-top:10px;min-height:80px;max-height:180px;"></div>
-      </div></div>
-    </div>
-
-    <!-- BMS Metrics -->
-    <div class="grid-4" style="margin-bottom:16px;">
-      <div class="metric green"><div class="metric-label">Pack Voltage</div><div class="metric-value"><span id="b_pack_v">&#8212;</span><span class="metric-unit">V</span></div></div>
-      <div class="metric amber"><div class="metric-label">Current</div><div class="metric-value"><span id="b_current">&#8212;</span><span class="metric-unit">A</span></div></div>
-      <div class="metric blue"><div class="metric-label">SOC</div><div class="metric-value"><span id="b_soc">&#8212;</span><span class="metric-unit">%</span></div></div>
-      <div class="metric purple"><div class="metric-label">SOH</div><div class="metric-value"><span id="b_soh">&#8212;</span><span class="metric-unit">%</span></div></div>
-    </div>
-    <div class="grid-4" style="margin-bottom:16px;">
-      <div class="metric cyan"><div class="metric-label">Capacity Left</div><div class="metric-value"><span id="b_cap_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
-      <div class="metric cyan"><div class="metric-label">Energy Left</div><div class="metric-value"><span id="b_energy_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
-      <div class="metric amber"><div class="metric-label">Charge Cycles</div><div class="metric-value"><span id="b_cycles">&#8212;</span></div></div>
-      <div class="metric red"><div class="metric-label">Cell Delta</div><div class="metric-value"><span id="b_delta">&#8212;</span><span class="metric-unit">mV</span></div></div>
-    </div>
-    <div class="grid-4" style="margin-bottom:16px;">
-      <div class="metric green"><div class="metric-label">Min Cell V</div><div class="metric-value"><span id="b_min_cv">&#8212;</span><span class="metric-unit">V</span></div></div>
-      <div class="metric green"><div class="metric-label">Max Cell V</div><div class="metric-value"><span id="b_max_cv">&#8212;</span><span class="metric-unit">V</span></div></div>
-      <div class="metric red"><div class="metric-label">Min Temp</div><div class="metric-value"><span id="b_min_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-      <div class="metric red"><div class="metric-label">Max Temp</div><div class="metric-value"><span id="b_max_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-    </div>
-    <div class="grid-4" style="margin-bottom:16px;">
-      <div class="metric purple"><div class="metric-label">MOSFET Temp</div><div class="metric-value"><span id="b_mos_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-      <div class="metric purple"><div class="metric-label">Ambient Temp</div><div class="metric-value"><span id="b_amb_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-      <div class="metric blue"><div class="metric-label">BMS State</div><div class="metric-value" style="font-size:16px;"><span id="b_state">&#8212;</span></div></div>
-      <div class="metric blue"><div class="metric-label">Cell Count</div><div class="metric-value"><span id="b_cell_count">&#8212;</span></div></div>
-    </div>
-
-    <!-- Cell charts -->
-    <div class="grid-2" style="margin-bottom:16px;">
-      <div class="card"><div class="card-header">Cell Voltages</div><div class="card-body"><div id="bCells" class="bms-list"></div></div></div>
-      <div class="card"><div class="card-header">Cell Temperatures</div><div class="card-body"><div id="bTemps" class="bms-list"></div></div></div>
-    </div>
-
-    <!-- BMS Frame Log -->
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-header">BMS Frame Log <button class="btn btn-outline btn-sm" onclick="clearBmsLog()">Clear</button></div>
-      <div class="card-body"><div id="bmsLog" class="console-output" style="max-height:220px;"></div></div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ═══════════════ COMMANDS ═══════════════ -->
-<div class="tab-content" id="tab-commands">
-  <div class="grid-2" style="margin-bottom:16px;">
-    <div class="card"><div class="card-header">Send Inverter Command</div><div class="card-body">
-      <div class="form-group" style="margin-bottom:12px;"><label>Quick Commands</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QPIGS')">QPIGS</button>
-          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QMOD')">QMOD</button>
-          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QPIWS')">QPIWS</button>
-          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QID')">QID</button>
-          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QVFW')">QVFW</button>
-          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QFLAG')">QFLAG</button>
+          <div class="status-bar" id="bmsFlags"></div>
         </div>
       </div>
-      <div class="form-group"><label>Custom Command</label>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="invCmdInput" placeholder="e.g. QPIGS" style="flex:1;">
-          <button class="btn btn-primary" onclick="sendInvCustom()">Send &#9654;</button>
+      <div class="card">
+        <div class="card-header">BMS Command Center</div>
+        <div class="card-body">
+          <div class="form-group" style="margin-bottom:12px;"><label>Select Command</label><select id="bmsCmdSelect" onchange="onBmsCommandSelect()" style="width:100%;"><option value="">&#8212; Select &#8212;</option></select></div>
+          <div id="bmsCmdDesc" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;font-family:var(--mono);min-height:16px;"></div>
+          <div class="form-group" style="margin-bottom:10px;"><label>Value (decimal or hex)</label><input type="text" id="bmsCmdValue" placeholder="e.g. 16 or 0x0010" oninput="buildBmsHex()" style="width:100%;"></div>
+          <div class="form-group" style="margin-bottom:10px;"><label>Hex Frame (CRC auto-appended)</label><input type="text" id="bmsCmdHex" readonly style="width:100%;color:var(--accent-cyan);"></div>
+          <button class="btn btn-primary btn-sm" onclick="sendBmsCommand()" id="bmsSendBtn">Send &#9654;</button>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+            <div class="form-group" style="margin-bottom:10px;"><label>Quick Query</label>
+              <button class="btn btn-outline btn-sm" onclick="sendBmsAscii('#H0','bmsQuickQueryBtn')" id="bmsQuickQueryBtn">Send #H0</button>
+            </div>
+            <div class="form-group" style="margin-bottom:10px;"><label>Custom Command</label>
+              <input type="text" id="bmsCustomInput" placeholder="HEX: 02 06 ...  or ASCII: #H0" style="width:100%;margin-bottom:6px;">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <select id="bmsCustomMode" style="width:auto;"><option value="HEX">HEX</option><option value="ASCII">ASCII</option></select>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);"><input type="checkbox" id="bmsCustomCrc" checked> Append CRC</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);"><input type="checkbox" id="bmsCustomCr"> Append CR</label>
+                <button class="btn btn-primary btn-sm" onclick="sendBmsCustom()" id="bmsCustomSendBtn">Send</button>
+              </div>
+            </div>
+          </div>
+          <div id="bmsCmdResponse" class="console-output" style="margin-top:12px;min-height:80px;max-height:200px;"><div style="color:var(--text-muted);">Response appears here...</div></div>
         </div>
+      </div>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric green"><div class="metric-label">Pack Voltage</div><div class="metric-value"><span id="bms_pack_v">&#8212;</span><span class="metric-unit">V</span></div></div>
+      <div class="metric amber"><div class="metric-label">Current</div><div class="metric-value"><span id="bms_current">&#8212;</span><span class="metric-unit">A</span></div></div>
+      <div class="metric blue"><div class="metric-label">SOC</div><div class="metric-value"><span id="bms_soc">&#8212;</span><span class="metric-unit">%</span></div></div>
+      <div class="metric purple"><div class="metric-label">SOH</div><div class="metric-value"><span id="bms_soh">&#8212;</span><span class="metric-unit">%</span></div></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric cyan"><div class="metric-label">Capacity Left</div><div class="metric-value"><span id="bms_cap_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
+      <div class="metric cyan"><div class="metric-label">Energy Left</div><div class="metric-value"><span id="bms_energy_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
+      <div class="metric amber"><div class="metric-label">Charge Cycles</div><div class="metric-value"><span id="bms_cycles">&#8212;</span></div></div>
+      <div class="metric red"><div class="metric-label">Cell Delta</div><div class="metric-value"><span id="bms_delta">&#8212;</span><span class="metric-unit">mV</span></div></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric green"><div class="metric-label">Min Cell V</div><div class="metric-value"><span id="bms_min_cell_v">&#8212;</span><span class="metric-unit">V</span></div></div>
+      <div class="metric green"><div class="metric-label">Max Cell V</div><div class="metric-value"><span id="bms_max_cell_v">&#8212;</span><span class="metric-unit">V</span></div></div>
+      <div class="metric red"><div class="metric-label">Min Temp</div><div class="metric-value"><span id="bms_min_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+      <div class="metric red"><div class="metric-label">Max Temp</div><div class="metric-value"><span id="bms_max_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric purple"><div class="metric-label">MOSFET Temp</div><div class="metric-value"><span id="bms_mos_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+      <div class="metric purple"><div class="metric-label">Ambient Temp</div><div class="metric-value"><span id="bms_amb_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+      <div class="metric blue"><div class="metric-label">BMS State</div><div class="metric-value" style="font-size:16px;"><span id="bms_state">&#8212;</span></div></div>
+      <div class="metric blue"><div class="metric-label">Cell Count</div><div class="metric-value"><span id="bms_cell_count">&#8212;</span></div></div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="card"><div class="card-header">Cell Voltages</div><div class="card-body"><div id="bmsCells" class="bms-list"></div></div></div>
+      <div class="card"><div class="card-header">Cell Temperatures</div><div class="card-body"><div id="bmsTemps" class="bms-list"></div></div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px;"><div class="card-header">BMS Frame Log <button class="btn btn-outline btn-sm" onclick="clearBmsLog()">Clear</button></div><div class="card-body"><div id="bmsLog" class="console-output" style="max-height:240px;"></div></div></div>
+    <div class="card"><div class="card-header">Raw BMS Frame</div><div class="card-body"><div id="bmsRaw" class="console-output" style="max-height:160px;"><span style="color:var(--text-muted);">Last raw frame hex appears here...</span></div></div></div>
+  </div>
+</div>
+
+<!-- COMMAND CENTER -->
+<div class="tab-content" id="tab-commands">
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card"><div class="card-header">Send Command</div><div class="card-body">
+      <div class="form-group" style="margin-bottom:12px;"><label>Select Command</label><select id="cmdSelect" onchange="onCommandSelect()" style="width:100%;"><option value="">&#8212; Select &#8212;</option></select></div>
+      <div id="cmdDescription" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;font-family:var(--mono);min-height:16px;"></div>
+      <div id="cmdParamArea" style="display:none;margin-bottom:12px;"><div class="form-group"><label id="cmdParamLabel">Parameter</label><div id="cmdParamInput"></div></div></div>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <div class="form-group" style="flex:1;"><label>Full Command</label><input type="text" id="cmdRawInput" placeholder="e.g. QPIGS" style="width:100%;"></div>
+        <button class="btn btn-primary" onclick="sendCommand()" id="sendCmdBtn">Send &#9654;</button>
       </div>
     </div></div>
     <div class="card"><div class="card-header">Response</div><div class="card-body">
-      <div id="invCmdResp" class="console-output" style="min-height:180px;max-height:400px;"><div style="color:var(--text-muted);font-family:var(--mono);font-size:12px;">Send a command to see the response...</div></div>
+      <div id="cmdResponse" class="console-output" style="min-height:220px;max-height:500px;"><div style="color:var(--text-muted);">Send a command to see the response...</div></div>
     </div></div>
   </div>
 
-  <!-- Quick Settings Panel -->
   <div class="card" style="margin-bottom:16px;">
-    <div class="card-header">Inverter Quick Settings <span class="badge" style="background:rgba(245,158,11,0.2);color:var(--amber);border-color:rgba(245,158,11,0.3);">WRITE</span></div>
-    <div class="card-body" id="invQuickSettings" style="max-height:520px;overflow-y:auto;"></div>
+    <div class="card-header">Inverter Quick Settings <span class="badge" style="background:var(--accent-amber);">WRITE</span></div>
+    <div class="card-body" id="invQuickSettings" style="max-height:500px;overflow-y:auto;"></div>
   </div>
-
-  <div class="card">
-    <div class="card-header">Command History</div>
-    <div class="card-body"><div id="cmdHistory" class="console-output" style="max-height:300px;"></div></div>
-  </div>
+  <div class="card"><div class="card-header">Command History</div><div class="card-body"><div id="cmdHistory" class="console-output" style="max-height:300px;"></div></div></div>
 </div>
 
-<!-- ═══════════════ SETTINGS ═══════════════ -->
+<!-- SETTINGS -->
 <div class="tab-content" id="tab-settings">
   <div class="settings-nav" id="settingsNav"></div>
   <div id="settingsContent"></div>
 </div>
 
-<!-- ═══════════════ LOGS ═══════════════ -->
+<!-- LOGS -->
 <div class="tab-content" id="tab-logs">
-  <div class="card">
-    <div class="card-header">Live Log <button class="btn btn-outline btn-sm" onclick="clearLog()">Clear</button></div>
-    <div class="card-body"><div id="liveLog" class="console-output" style="max-height:600px;"></div></div>
-  </div>
+  <div class="card"><div class="card-header">Raw Log <button class="btn btn-outline btn-sm" onclick="clearConsole()">Clear</button></div>
+  <div class="card-body"><div id="rawLog" class="console-output" style="max-height:600px;"></div></div></div>
 </div>
 
 </div><!-- /.main -->
