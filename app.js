@@ -4,7 +4,7 @@
 /* ── BLE CONFIG ──────────────────────────────────────────── */
 const SVC_UUID = 0xFFF0, CMD_UUID = 0xFFF1, TX_UUID = 0xFFF2;
 const POLL_MS  = 2000;
-const PH       = '&#8212;';
+const PH       = '--';
 
 /* ── COMMAND DATABASE (replaces commands.csv) ──────────────── */
 const COMMANDS = [
@@ -117,9 +117,9 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function fmtNum(v,dec){ if(v==null||v===''||isNaN(+v))return'&#8212;'; return dec==null?String(v):(+v).toFixed(dec); }
+function fmtNum(v,dec){ if(v==null||v===''||isNaN(+v))return PH; return dec==null?String(v):(+v).toFixed(dec); }
 /* like fmtNum but strips trailing .0 / .00 — use for current, energy, etc. */
-function fmtClean(v,maxDec){ if(v==null||v===''||isNaN(+v))return'&#8212;'; return String(parseFloat((+v).toFixed(maxDec))); }
+function fmtClean(v,maxDec){ if(v==null||v===''||isNaN(+v))return PH; return String(parseFloat((+v).toFixed(maxDec))); }
 
 function setM(id,v,dec){
   const el=$(id); if(!el)return;
@@ -272,7 +272,7 @@ function applyTelemetry(o){
     ['m_grid_v','m_grid_f','m_out_v','m_out_f','m_out_w','m_out_va',
      'm_load_pct','m_bus_v','m_bat_v','m_bat_scc','m_bat_cap',
      'm_chg_a','m_dis_a','m_temp','m_pv_v','m_pv_a','m_pv_w'
-    ].forEach(id=>{ const el=$(id); if(el) el.innerHTML='&#8212;'; });
+    ].forEach(id=>{ const el=$(id); if(el) el.innerHTML=PH; });
     $('statusFlags').innerHTML='<span style="color:var(--accent-amber)">&#9888; Inverter UART offline — no data</span>';
     $('modeBadge').className='mode-badge mode-S';
     $('modeIcon').innerHTML='&#9888;';
@@ -425,47 +425,41 @@ function logCorrelation(){
 
 /* ── BMS THRESHOLD DECODER ───────────────────────────────── */
 /* Positions from BMS Commands Reference Sheet (user-provided table).
-   Response to "Get Thresholds" (02 06 9B 7C 00 01 + CRC) is #-delimited ASCII.
-   Positions are 0-indexed fields after stripping the leading '#'. */
+   Response to "Get Thresholds" is parsed by fixed byte positions (0-indexed). */
 let lastThresholds = null; // stores last decoded threshold values
 
 function decodeBmsThreshold(hexStr){
-  /* Convert hex bytes back to ASCII if needed */
-  let ascii = hexStr;
-  if(/^[0-9a-fA-F\s]+$/.test(hexStr.trim())){
-    try{
-      const bytes=hexStr.trim().split(/\s+/).map(h=>parseInt(h,16));
-      ascii=bytes.map(b=>String.fromCharCode(b)).join('');
-    }catch{ return null; }
-  }
-  /* Extract #val#val...& or &val#val...& */
-  const clean=ascii.replace(/^[&#\s]+/,'').replace(/[&#\s]+$/,'');
-  if(!clean.includes('#')) return null;
-  const fields=clean.split('#').map(s=>+s.trim());
-  if(fields.length < 10) return null;
+  if(!hexStr) return null;
+  const bytes = hexStr.trim().split(/\s+/)
+    .map(h => parseInt(h, 16))
+    .filter(v => Number.isInteger(v) && v >= 0 && v <= 255);
+  if(bytes.length < 36) return null;
 
-  const f1=(i)=>i<fields.length?fields[i]:0;
-  const f2=(hi,lo)=>f1(hi)*256+f1(lo);   // 2 bytes big-endian
-  const fs=(i)=>f1(i)>127?f1(i)-256:f1(i); // signed byte
+  const b = (i) => (i >= 0 && i < bytes.length ? bytes[i] : 0);
+  const u16rev = (lo, hi) => ((b(hi) << 8) | b(lo)); /* docs: high+low (reversed) */
+  const s8 = (i) => (b(i) > 127 ? b(i) - 256 : b(i));
+
+  const cellUvp = u16rev(5, 6);
+  const cellOvp = u16rev(7, 8);
 
   const result=[
-    {label:'Cell UVP',           value:f2(5,6),           unit:'mV',  cmd:'PBDV'},
-    {label:'Cell OVP',           value:f2(7,8),           unit:'mV',  cmd:'PCVV'},
-    {label:'Cell Count',         value:f1(9),             unit:'cells',cmd:''},
-    {label:'Cell OVPR',          value:f2(7,8)-f1(22),    unit:'mV',  cmd:''},
-    {label:'DOC (Disch. OC)',    value:f1(20),            unit:'A',   cmd:''},
-    {label:'COC (Chg. OC)',      value:f1(12),            unit:'A',   cmd:''},
-    {label:'Charge OTP',         value:f1(16),            unit:'°C',  cmd:''},
-    {label:'Discharge OTP',      value:f1(17),            unit:'°C',  cmd:''},
-    {label:'Factory Capacity',   value:f1(21),            unit:'Ah',  cmd:''},
-    {label:'Cell UVPR',          value:f2(5,6)+f1(23),    unit:'mV',  cmd:''},
-    {label:'Balance Trigger V',  value:f2(24,25),         unit:'mV',  cmd:''},
-    {label:'Discharge OTR',      value:f1(27),            unit:'°C',  cmd:''},
-    {label:'Charge OTPR',        value:f1(28),            unit:'°C',  cmd:''},
-    {label:'Min OTR',            value:fs(29),            unit:'°C',  cmd:''},
-    {label:'Min OTP',            value:f1(30),            unit:'°C',  cmd:''},
-    {label:'Sleep Hour',         value:f1(34),            unit:'h',   cmd:''},
-    {label:'Sleep Min',          value:f1(35),            unit:'min', cmd:''},
+    {label:'Cell UVP',                value:cellUvp,            unit:'mV'},
+    {label:'Cell OVP',                value:cellOvp,            unit:'mV'},
+    {label:'Cell Count',              value:b(9),               unit:'cells'},
+    {label:'Cell OVPR',               value:cellOvp - b(22),    unit:'mV'},
+    {label:'DOC',                     value:b(20),              unit:'A'},
+    {label:'COC',                     value:b(12),              unit:'A'},
+    {label:'Charge OTP',              value:b(16),              unit:'C'},
+    {label:'Discharge OTP',           value:b(17),              unit:'C'},
+    {label:'Factory Capacity',        value:b(21),              unit:'Ah'},
+    {label:'Cell UVPR',               value:cellUvp + b(23),    unit:'mV'},
+    {label:'Balance Trigger Voltage', value:u16rev(24, 25),     unit:'mV'},
+    {label:'Discharge OTR',           value:b(27),              unit:'C'},
+    {label:'Charge OTPR',             value:b(28),              unit:'C'},
+    {label:'Min OTR',                 value:s8(29),             unit:'C'},
+    {label:'Min OTP',                 value:b(30),              unit:'C'},
+    {label:'Sleep in Discharge Hour', value:b(34),              unit:'h'},
+    {label:'Sleep in Discharge Min',  value:b(35),              unit:'min'},
   ];
   lastThresholds = {};
   result.forEach(r => { lastThresholds[r.label] = r; });
@@ -601,7 +595,7 @@ function handleBmsResp(obj){
     if(table){
       el.innerHTML+=`<div style="margin:6px 0 4px;padding:6px 10px;background:#050a14;border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div style="font-size:11px;color:var(--accent-amber);margin-bottom:4px;">&#9881; Decoded Threshold Values:</div>${table}</div>`;
-      addRawLog('INF','BMS threshold decoded: '+thrFields.filter(f=>f.raw!==0).map(f=>f.label+'='+f.raw).join(', '));
+      addRawLog('INF','BMS threshold decoded: '+thrFields.filter(f=>f.value!==0).map(f=>f.label+'='+f.value).join(', '));
     }
   } else if(asciiStr){
     el.innerHTML+=`<div class="console-line"><span class="console-dir rx" style="color:var(--accent-green);">ASCII</span><span class="console-data">${escapeHtml(asciiStr)}</span></div>`;
