@@ -2,7 +2,10 @@
 'use strict';
 
 /* ── BLE CONFIG ──────────────────────────────────────────── */
-const SVC_UUID = 0xFFF0, CMD_UUID = 0xFFF1, TX_UUID = 0xFFF2;
+const SVC_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
+const CMD_UUID = '0000fff1-0000-1000-8000-00805f9b34fb';
+const TX_UUID  = '0000fff2-0000-1000-8000-00805f9b34fb';
+const BLE_NAME_PREFIX = 'SOLAR_ESP';
 const POLL_MS  = 2000;
 const PH       = '--';
 
@@ -217,8 +220,8 @@ async function connectBle(){
   if(!navigator.bluetooth){ alert('Web Bluetooth not available. Use Chrome or Edge on Android/Desktop.'); return; }
   const btn=$('connectBtn'); if(btn) btn.disabled=true;
   try{
-    addBleLog('Scanning...');
-    bleDevice=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[SVC_UUID]});
+    addBleLog('Scanning BLE devices...');
+    bleDevice=await requestBleDeviceRobust();
     bleDevice.addEventListener('gattserverdisconnected',onDisconnected);
     bleServer=await bleDevice.gatt.connect();
     const svc=await bleServer.getPrimaryService(SVC_UUID);
@@ -232,9 +235,42 @@ async function connectBle(){
     startPoll();
     document.querySelector('.tab-btn[data-tab="dashboard"]')?.click();
   }catch(e){
-    addBleLog('Connect failed: '+e.message,'err');
+    let msg=e?.message||'unknown error';
+    if(e?.name==='NotFoundError') msg='No BLE device selected. Keep SOLAR_ESP advertising and try again.';
+    if(e?.name==='NotAllowedError') msg='Bluetooth permission denied. Allow Bluetooth permission in browser settings.';
+    if(e?.name==='SecurityError') msg='Open this page on HTTPS (GitHub Pages) in Chrome/Edge.';
+    addBleLog('Connect failed: '+msg,'err');
     onDisconnected();
   }finally{ if(btn) btn.disabled=false; }
+}
+
+async function requestBleDeviceRobust(){
+  const reqs=[
+    {
+      filters:[{namePrefix:BLE_NAME_PREFIX}],
+      optionalServices:[SVC_UUID]
+    },
+    {
+      filters:[{services:[SVC_UUID]}],
+      optionalServices:[SVC_UUID]
+    },
+    {
+      acceptAllDevices:true,
+      optionalServices:[SVC_UUID]
+    }
+  ];
+  let lastErr=null;
+  for(let i=0;i<reqs.length;i++){
+    try{
+      addBleLog(`Scan mode ${i+1}/3`);
+      return await navigator.bluetooth.requestDevice(reqs[i]);
+    }catch(e){
+      lastErr=e;
+      if(e?.name==='NotAllowedError' || e?.name==='SecurityError') throw e;
+      /* NotFoundError/TypeError can happen on stricter browsers; try next mode */
+    }
+  }
+  throw (lastErr||new Error('BLE device not found'));
 }
 
 function onDisconnected(){
