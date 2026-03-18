@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#08101f">
+  <meta name="description" content="INVISOL production dashboard with BLE mode and SoftAP fallback">
+  <title>INVISOL Connect</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <h1>INVISOL Connect</h1>
+        <p>Production dashboard: BLE cloud page + SoftAP local fallback</p>
+      </div>
+      <div class="header-actions">
+        <button id="installBtn" class="btn" hidden>Install App</button>
+        <button id="softapBtn" class="btn">Open 192.168.4.1</button>
+        <button id="connectBtn" class="btn primary">Connect BLE</button>
+      </div>
+    </header>
+
+    <section class="guide">
+      <div class="guide-title">Quick Start</div>
+      <div class="guide-text">1) Power ESP  2) Tap Connect BLE  3) Select SOLAR_ESP  4) Enter passkey 123456</div>
+      <div class="guide-sub">No internet? Connect to ESP Wi-Fi and use <code>http://192.168.4.1</code></div>
+    </section>
+
+    <section class="status-row">
+      <div class="chip" id="chipBle">BLE: Disconnected</div>
+      <div class="chip" id="chipInv">Inverter: --</div>
+      <div class="chip" id="chipBms">BMS: --</div>
+      <div class="chip" id="chipPoll">Auto Poll: ON</div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>Mode</h3>
+        <div class="value" id="modeName">--</div>
+        <div class="sub" id="modeCode">--</div>
+      </article>
+      <article class="card">
+        <h3>Output Power</h3>
+        <div class="value"><span id="outW">--</span> W</div>
+        <div class="sub"><span id="loadPct">--</span>% load</div>
+      </article>
+      <article class="card">
+        <h3>Battery</h3>
+        <div class="value"><span id="batV">--</span> V</div>
+        <div class="sub">SOC <span id="batSoc">--</span>%</div>
+      </article>
+      <article class="card">
+        <h3>PV</h3>
+        <div class="value"><span id="pvW">--</span> W</div>
+        <div class="sub"><span id="pvV">--</span> V | <span id="pvA">--</span> A</div>
+      </article>
+      <article class="card">
+        <h3>Grid</h3>
+        <div class="value"><span id="gridV">--</span> V</div>
+        <div class="sub"><span id="gridHz">--</span> Hz</div>
+      </article>
+      <article class="card">
+        <h3>BMS</h3>
+        <div class="value"><span id="bmsPackV">--</span> V</div>
+        <div class="sub">SOC <span id="bmsSoc">--</span>% | I <span id="bmsCurrent">--</span> A</div>
+      </article>
+    </section>
+
+    <section class="commands">
+      <h2>Commands</h2>
+      <div class="row">
+        <input id="invInput" type="text" placeholder="Inverter command, e.g. QPIGS">
+        <button id="invSendBtn" class="btn">Send INV</button>
+        <button id="quickQpigsBtn" class="btn">QPIGS</button>
+        <button id="quickQmodBtn" class="btn">QMOD</button>
+      </div>
+      <div class="row">
+        <input id="bmsAsciiInput" type="text" placeholder="BMS ASCII, e.g. #H0">
+        <button id="bmsAsciiBtn" class="btn">Send BMS ASCII</button>
+        <button id="quickBmsBtn" class="btn">Quick #H0</button>
+      </div>
+      <div class="row">
+        <input id="bmsHexInput" type="text" placeholder="BMS HEX, e.g. 02 06 9B C5 00 10">
+        <button id="bmsHexBtn" class="btn">Send BMS HEX</button>
+      </div>
+      <div class="row">
+        <button id="toggleInvPollBtn" class="btn">Toggle INV Poll</button>
+        <button id="toggleBmsPollBtn" class="btn">Toggle BMS Poll</button>
+        <button id="refreshBtn" class="btn">Refresh Now</button>
+      </div>
+    </section>
+
+    <section class="log-wrap">
+      <h2>Live Log</h2>
+      <div id="log" class="log"></div>
+    </section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
