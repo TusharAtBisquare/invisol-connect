@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+
 <header class="header">
   <div class="logo">
     <div class="logo-icon">&#9889;</div>
@@ -30,179 +31,239 @@
   <button class="tab-btn" data-tab="dashboard">Dashboard</button>
   <button class="tab-btn" data-tab="battery">Battery / BMS</button>
   <button class="tab-btn" data-tab="commands">Commands</button>
+  <button class="tab-btn" data-tab="settings">Settings</button>
   <button class="tab-btn" data-tab="logs">Logs</button>
 </nav>
 
 <div class="main">
 
-  <!-- CONNECTION TAB -->
-  <div class="tab-content active" id="tab-connection">
-    <div class="card" style="max-width:640px;margin:40px auto;">
-      <div class="card-header">BLE Connection <span class="badge" id="connBadge">OFFLINE</span></div>
+<!-- ═══════════════ CONNECTION ═══════════════ -->
+<div class="tab-content active" id="tab-connection">
+  <div class="card" style="max-width:660px;margin:40px auto;">
+    <div class="card-header">BLE Connection <span class="badge" id="connBadge">OFFLINE</span></div>
+    <div class="card-body">
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Connect to <strong>SOLAR_ESP</strong> via Web Bluetooth. Requires Chrome or Edge on Android/Desktop.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+        <button class="btn btn-primary" id="connectBtn2">Connect BLE</button>
+        <button class="btn btn-outline" onclick="window.open('http://192.168.4.1','_blank')">Open SoftAP (192.168.4.1)</button>
+      </div>
+      <div style="padding:14px;background:var(--bg-primary);border-radius:var(--radius-sm);border:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:2.2;">
+        Device: <span style="color:var(--accent-cyan);">SOLAR_ESP</span> &nbsp;|&nbsp;
+        Service: <span style="color:var(--accent-cyan);">0xFFF0</span> &nbsp;|&nbsp;
+        CMD: <span style="color:var(--accent-cyan);">0xFFF1</span> (Write) &nbsp;|&nbsp;
+        TX: <span style="color:var(--accent-cyan);">0xFFF2</span> (Notify)
+      </div>
+      <div id="bleLog" class="console-output" style="margin-top:14px;max-height:200px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ DASHBOARD ═══════════════ -->
+<div class="tab-content" id="tab-dashboard">
+  <div id="dashNoData" class="no-data-overlay"><div class="no-data-icon">&#128225;</div><div>No Data — Connect BLE first</div></div>
+  <div id="dashData" style="display:none;">
+
+    <!-- Energy Flow -->
+    <div class="card flow-card" style="margin-bottom:16px;">
+      <div class="card-header">Energy Flow <span class="badge" id="flowBadge">LIVE</span></div>
       <div class="card-body">
-        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Connect to <strong>SOLAR_ESP</strong> via Web Bluetooth. Requires Chrome or Edge on Android.</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
-          <button class="btn btn-primary" id="connectBtn2">Connect BLE</button>
-          <button class="btn btn-outline" onclick="window.open('http://192.168.4.1','_blank')">Open SoftAP (192.168.4.1)</button>
+        <div class="flow-canvas" id="flowCanvas">
+          <svg class="flow-lines" viewBox="0 0 1000 400" preserveAspectRatio="none">
+            <path id="flowLinePv"   class="flow-line green" d="M180,100 L500,200"></path>
+            <path id="flowLineGrid" class="flow-line blue"  d="M820,100 L500,200"></path>
+            <path id="flowLineBat"  class="flow-line"       d="M200,300 L500,200"></path>
+            <path id="flowLineHome" class="flow-line"       d="M500,200 L800,300"></path>
+          </svg>
+          <div class="flow-node" data-node="pv"       style="--x:18%;--y:25%;"><div class="title">Solar</div><div class="value"><span id="flow_pv_w">&#8212;</span> W</div><div class="sub"><span id="flow_pv_v">&#8212;</span> V &bull; <span id="flow_pv_a">&#8212;</span> A</div></div>
+          <div class="flow-node" data-node="grid"     style="--x:82%;--y:25%;"><div class="title">Grid</div><div class="value"><span id="flow_grid_v">&#8212;</span> V</div><div class="sub"><span id="flow_grid_hz">&#8212;</span> Hz</div></div>
+          <div class="flow-node" data-node="inverter" style="--x:50%;--y:50%;"><div class="title">Inverter</div><div class="value"><span id="flow_mode">&#8212;</span></div><div class="pill"><span id="flow_load">&#8212;</span>% Load</div></div>
+          <div class="flow-node" data-node="battery"  style="--x:20%;--y:75%;"><div class="title">Battery</div><div class="value"><span id="flow_bat_v">&#8212;</span> V</div><div class="sub"><span id="flow_bat_soc">&#8212;</span>% SOC</div></div>
+          <div class="flow-node" data-node="home"     style="--x:80%;--y:75%;"><div class="title">Home</div><div class="value"><span id="flow_out_w">&#8212;</span> W</div><div class="sub">Output</div></div>
         </div>
-        <div style="padding:14px;background:var(--bg-primary);border-radius:var(--radius-sm);border:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:2;">
-          Device: <span style="color:var(--accent-cyan);">SOLAR_ESP</span> &nbsp;|&nbsp;
-          Service: <span style="color:var(--accent-cyan);">0xFFF0</span> &nbsp;|&nbsp;
-          CMD: <span style="color:var(--accent-cyan);">0xFFF1</span> &nbsp;|&nbsp;
-          TX: <span style="color:var(--accent-cyan);">0xFFF2</span>
-        </div>
-        <div style="margin-top:14px;" id="bleLog" class="console-output" style="max-height:200px;"></div>
+        <div class="detail-panel"><div class="detail-title" id="flowDetailsTitle">Click a node for details</div><div class="detail-grid" id="flowDetailsGrid"></div></div>
       </div>
     </div>
-  </div>
 
-  <!-- DASHBOARD TAB -->
-  <div class="tab-content" id="tab-dashboard">
-    <div id="dashNoData" class="no-data-overlay"><div class="no-data-icon">&#128225;</div><div>No Data — Connect BLE first</div></div>
-    <div id="dashData" style="display:none;">
-      <!-- Energy Flow -->
-      <div class="card flow-card" style="margin-bottom:16px;">
-        <div class="card-header">Energy Flow <span class="badge" id="flowBadge">LIVE</span></div>
-        <div class="card-body">
-          <div class="flow-canvas" id="flowCanvas">
-            <svg class="flow-lines" viewBox="0 0 1000 400" preserveAspectRatio="none">
-              <path id="flowLinePv"   class="flow-line green" d="M180,100 L500,200"></path>
-              <path id="flowLineGrid" class="flow-line blue"  d="M820,100 L500,200"></path>
-              <path id="flowLineBat"  class="flow-line"       d="M200,300 L500,200"></path>
-              <path id="flowLineHome" class="flow-line"       d="M500,200 L800,300"></path>
-            </svg>
-            <div class="flow-node" data-node="pv"       style="--x:18%;--y:25%;"><div class="title">Solar</div><div class="value"><span id="fp_pv_w">&#8212;</span> W</div><div class="sub"><span id="fp_pv_v">&#8212;</span> V &bull; <span id="fp_pv_a">&#8212;</span> A</div></div>
-            <div class="flow-node" data-node="grid"     style="--x:82%;--y:25%;"><div class="title">Grid</div><div class="value"><span id="fp_grid_v">&#8212;</span> V</div><div class="sub"><span id="fp_grid_hz">&#8212;</span> Hz</div></div>
-            <div class="flow-node" data-node="inverter" style="--x:50%;--y:50%;"><div class="title">Inverter</div><div class="value"><span id="fp_mode">&#8212;</span></div><div class="pill"><span id="fp_load">&#8212;</span>% Load</div></div>
-            <div class="flow-node" data-node="battery"  style="--x:20%;--y:75%;"><div class="title">Battery</div><div class="value"><span id="fp_bat_v">&#8212;</span> V</div><div class="sub"><span id="fp_bat_soc">&#8212;</span>% SOC</div></div>
-            <div class="flow-node" data-node="home"     style="--x:80%;--y:75%;"><div class="title">Home</div><div class="value"><span id="fp_out_w">&#8212;</span> W</div><div class="sub">Output</div></div>
-          </div>
-          <div class="detail-panel"><div class="detail-title" id="flowDetailsTitle">Select a node</div><div class="detail-grid" id="flowDetailsGrid"></div></div>
-        </div>
-      </div>
-      <!-- Mode + Warnings -->
-      <div class="grid-2" style="margin-bottom:16px;">
-        <div class="card"><div class="card-header">Inverter Mode</div><div class="card-body" style="display:flex;align-items:center;gap:16px;">
-          <div class="mode-badge mode-S" id="modeBadge"><span id="modeIcon">&#9211;</span> <span id="modeText">&#8212;</span></div>
-          <div class="status-bar" id="statusFlags"></div>
-        </div></div>
-        <div class="card"><div class="card-header">Warnings <span class="badge" id="warnCount">0</span></div><div class="card-body"><div id="warnList"><div class="warning-item ok">&#10003; No active warnings</div></div></div></div>
-      </div>
-      <!-- Grid + Output -->
-      <div class="grid-4" style="margin-bottom:16px;">
-        <div class="metric blue"><div class="metric-label">Grid Voltage</div><div class="metric-value"><span id="m_grid_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_grid_hz">&#8212;</span> Hz</div></div>
-        <div class="metric cyan"><div class="metric-label">Output Voltage</div><div class="metric-value"><span id="m_out_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_out_hz">&#8212;</span> Hz</div></div>
-        <div class="metric amber"><div class="metric-label">Output Power</div><div class="metric-value"><span id="m_out_w">&#8212;</span><span class="metric-unit">W</span></div><div class="metric-sub"><span id="m_out_va">&#8212;</span> VA &nbsp;|&nbsp; <span id="m_load_pct">&#8212;</span>%</div></div>
-        <div class="metric purple"><div class="metric-label">Bus Voltage</div><div class="metric-value"><span id="m_bus_v">&#8212;</span><span class="metric-unit">V</span></div></div>
-      </div>
-      <!-- Battery + PV -->
-      <div class="grid-4" style="margin-bottom:16px;">
-        <div class="metric green"><div class="metric-label">Battery Voltage</div><div class="metric-value"><span id="m_bat_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub">SCC: <span id="m_bat_scc">&#8212;</span> V</div></div>
-        <div class="metric green"><div class="metric-label">Battery SOC</div><div class="metric-value"><span id="m_bat_soc">&#8212;</span><span class="metric-unit">%</span></div></div>
-        <div class="metric cyan"><div class="metric-label">Charge / Discharge</div><div class="metric-value"><span id="m_chg_a">&#8212;</span><span class="metric-unit">A</span></div><div class="metric-sub">Dis: <span id="m_dis_a">&#8212;</span> A</div></div>
-        <div class="metric red"><div class="metric-label">Inverter Temp</div><div class="metric-value"><span id="m_inv_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-      </div>
-      <div class="grid-4" style="margin-bottom:16px;">
-        <div class="metric amber"><div class="metric-label">PV Voltage</div><div class="metric-value"><span id="m_pv_v">&#8212;</span><span class="metric-unit">V</span></div></div>
-        <div class="metric amber"><div class="metric-label">PV Current</div><div class="metric-value"><span id="m_pv_a">&#8212;</span><span class="metric-unit">A</span></div></div>
-        <div class="metric amber"><div class="metric-label">PV Power</div><div class="metric-value"><span id="m_pv_w">&#8212;</span><span class="metric-unit">W</span></div></div>
-        <div class="metric blue"><div class="metric-label">Last Update</div><div class="metric-value" style="font-size:16px;"><span id="m_ts">&#8212;</span></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- BATTERY TAB -->
-  <div class="tab-content" id="tab-battery">
-    <div id="bmsNoData" class="no-data-overlay"><div class="no-data-icon">&#128267;</div><div>No BMS Data — Connect BLE first</div></div>
-    <div id="bmsData" style="display:none;">
-      <div class="grid-2" style="margin-bottom:16px;">
-        <div class="card"><div class="card-header">BMS Status <span class="badge" id="bmsBadge">OFFLINE</span></div><div class="card-body">
-          <div class="status-indicator" style="margin-bottom:10px;"><div class="status-dot" id="bmsDot"></div><span id="bmsStatusText">No Data</span></div>
-          <div style="font-family:var(--mono);font-size:12px;color:var(--text-muted);margin-bottom:12px;">Frames: <span id="bmsFrameCount">0</span></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-            <button class="btn btn-primary btn-sm" id="bmsPollBtn" onclick="toggleBmsPoll()">&#9654; Auto-Poll ON</button>
-            <button class="btn btn-outline btn-sm" id="bmsQueryBtn" onclick="manualBmsQuery()">Query Now (#H0)</button>
-          </div>
-          <div class="status-bar" id="bmsFlags"></div>
-        </div></div>
-        <div class="card"><div class="card-header">BMS Command</div><div class="card-body">
-          <div class="form-group" style="margin-bottom:10px;"><label>ASCII Command</label>
-            <div style="display:flex;gap:8px;"><input type="text" id="bmsAsciiInput" placeholder="#H0" style="flex:1;"><button class="btn btn-primary btn-sm" onclick="sendBmsAsciiCmd()">Send</button></div>
-          </div>
-          <div class="form-group" style="margin-bottom:10px;"><label>HEX Command (space-separated)</label>
-            <div style="display:flex;gap:8px;"><input type="text" id="bmsHexInput" placeholder="02 06 9B 4C 00 01" style="flex:1;"><button class="btn btn-primary btn-sm" onclick="sendBmsHexCmd()">Send</button></div>
-          </div>
-          <div id="bmsCmdResp" class="console-output" style="min-height:80px;max-height:160px;margin-top:8px;"><div style="color:var(--text-muted);">Response appears here...</div></div>
-        </div></div>
-      </div>
-      <div class="grid-4" style="margin-bottom:16px;">
-        <div class="metric green"><div class="metric-label">Pack Voltage</div><div class="metric-value"><span id="b_pack_v">&#8212;</span><span class="metric-unit">V</span></div></div>
-        <div class="metric amber"><div class="metric-label">Current</div><div class="metric-value"><span id="b_current">&#8212;</span><span class="metric-unit">A</span></div></div>
-        <div class="metric blue"><div class="metric-label">SOC</div><div class="metric-value"><span id="b_soc">&#8212;</span><span class="metric-unit">%</span></div></div>
-        <div class="metric purple"><div class="metric-label">SOH</div><div class="metric-value"><span id="b_soh">&#8212;</span><span class="metric-unit">%</span></div></div>
-      </div>
-      <div class="grid-4" style="margin-bottom:16px;">
-        <div class="metric cyan"><div class="metric-label">Capacity Left</div><div class="metric-value"><span id="b_cap_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
-        <div class="metric cyan"><div class="metric-label">Energy Left</div><div class="metric-value"><span id="b_energy_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
-        <div class="metric amber"><div class="metric-label">Charge Cycles</div><div class="metric-value"><span id="b_cycles">&#8212;</span></div></div>
-        <div class="metric red"><div class="metric-label">Cell Delta</div><div class="metric-value"><span id="b_delta">&#8212;</span><span class="metric-unit">mV</span></div></div>
-      </div>
-      <div class="grid-4" style="margin-bottom:16px;">
-        <div class="metric green"><div class="metric-label">Min Cell V</div><div class="metric-value"><span id="b_min_cv">&#8212;</span><span class="metric-unit">V</span></div></div>
-        <div class="metric green"><div class="metric-label">Max Cell V</div><div class="metric-value"><span id="b_max_cv">&#8212;</span><span class="metric-unit">V</span></div></div>
-        <div class="metric red"><div class="metric-label">Min Temp</div><div class="metric-value"><span id="b_min_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-        <div class="metric red"><div class="metric-label">Max Temp</div><div class="metric-value"><span id="b_max_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-      </div>
-      <div class="grid-4" style="margin-bottom:16px;">
-        <div class="metric purple"><div class="metric-label">MOSFET Temp</div><div class="metric-value"><span id="b_mos_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-        <div class="metric purple"><div class="metric-label">Ambient Temp</div><div class="metric-value"><span id="b_amb_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
-        <div class="metric blue"><div class="metric-label">BMS State</div><div class="metric-value" style="font-size:16px;"><span id="b_state">&#8212;</span></div></div>
-        <div class="metric blue"><div class="metric-label">Cell Count</div><div class="metric-value"><span id="b_cell_count">&#8212;</span></div></div>
-      </div>
-      <div class="grid-2" style="margin-bottom:16px;">
-        <div class="card"><div class="card-header">Cell Voltages</div><div class="card-body"><div id="bCells" class="bms-list"></div></div></div>
-        <div class="card"><div class="card-header">Cell Temperatures</div><div class="card-body"><div id="bTemps" class="bms-list"></div></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- COMMANDS TAB -->
-  <div class="tab-content" id="tab-commands">
+    <!-- Mode + Warnings -->
     <div class="grid-2" style="margin-bottom:16px;">
-      <div class="card"><div class="card-header">Inverter Command</div><div class="card-body">
-        <div class="form-group" style="margin-bottom:12px;"><label>Quick Commands</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QPIGS')">QPIGS</button>
-            <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QMOD')">QMOD</button>
-            <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QPIWS')">QPIWS</button>
-            <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QID')">QID</button>
-            <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QVFW')">QVFW</button>
+      <div class="card"><div class="card-header">Inverter Mode</div><div class="card-body" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div class="mode-badge mode-S" id="modeBadge"><span id="modeIcon">&#9211;</span> <span id="modeText">&#8212;</span></div>
+        <div style="flex:1;"><div class="status-bar" id="statusFlags"></div></div>
+      </div></div>
+      <div class="card"><div class="card-header">Warnings <span class="badge" id="warningCount">0</span></div><div class="card-body"><div id="warningList"><div class="warning-item ok">&#10003; No active warnings</div></div></div></div>
+    </div>
+
+    <!-- Grid + Output -->
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric blue"><div class="metric-label">Grid Voltage</div><div class="metric-value"><span id="m_grid_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_grid_hz">&#8212;</span> Hz</div></div>
+      <div class="metric cyan"><div class="metric-label">Output Voltage</div><div class="metric-value"><span id="m_out_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub"><span id="m_out_hz">&#8212;</span> Hz</div></div>
+      <div class="metric amber"><div class="metric-label">Output Power</div><div class="metric-value"><span id="m_out_w">&#8212;</span><span class="metric-unit">W</span></div><div class="metric-sub"><span id="m_out_va">&#8212;</span> VA &nbsp;|&nbsp; <span id="m_load_pct">&#8212;</span>%</div></div>
+      <div class="metric purple"><div class="metric-label">Bus Voltage</div><div class="metric-value"><span id="m_bus_v">&#8212;</span><span class="metric-unit">V</span></div></div>
+    </div>
+
+    <!-- Battery + Charge -->
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric green"><div class="metric-label">Battery Voltage</div><div class="metric-value"><span id="m_bat_v">&#8212;</span><span class="metric-unit">V</span></div><div class="metric-sub">SCC: <span id="m_bat_scc">&#8212;</span> V</div></div>
+      <div class="metric green"><div class="metric-label">Battery SOC</div><div class="metric-value"><span id="m_bat_soc">&#8212;</span><span class="metric-unit">%</span></div></div>
+      <div class="metric cyan"><div class="metric-label">Charge / Discharge</div><div class="metric-value"><span id="m_chg_a">&#8212;</span><span class="metric-unit">A</span></div><div class="metric-sub">Dis: <span id="m_dis_a">&#8212;</span> A</div></div>
+      <div class="metric red"><div class="metric-label">Inverter Temp</div><div class="metric-value"><span id="m_inv_temp">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+    </div>
+
+    <!-- PV -->
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric amber"><div class="metric-label">PV Voltage</div><div class="metric-value"><span id="m_pv_v">&#8212;</span><span class="metric-unit">V</span></div></div>
+      <div class="metric amber"><div class="metric-label">PV Current</div><div class="metric-value"><span id="m_pv_a">&#8212;</span><span class="metric-unit">A</span></div></div>
+      <div class="metric amber"><div class="metric-label">PV Power</div><div class="metric-value"><span id="m_pv_w">&#8212;</span><span class="metric-unit">W</span></div></div>
+      <div class="metric blue"><div class="metric-label">Last Update</div><div class="metric-value" style="font-size:16px;"><span id="m_ts">&#8212;</span></div></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ BATTERY / BMS ═══════════════ -->
+<div class="tab-content" id="tab-battery">
+  <div id="bmsNoData" class="no-data-overlay"><div class="no-data-icon">&#128267;</div><div>No BMS Data — Connect BLE first</div></div>
+  <div id="bmsData" style="display:none;">
+
+    <div class="grid-2" style="margin-bottom:16px;">
+      <!-- BMS Status -->
+      <div class="card"><div class="card-header">BMS Status <span class="badge" id="bmsBadge">OFFLINE</span></div><div class="card-body">
+        <div class="status-indicator" style="margin-bottom:10px;"><div class="status-dot" id="bmsDot"></div><span id="bmsStatusText">No Data</span></div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-muted);margin-bottom:10px;">Frames: <span id="bmsFrameCount">0</span> &nbsp;&bull;&nbsp; Last: <span id="bmsTimestamp">&#8212;</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button class="btn btn-primary btn-sm" id="bmsPollBtn" onclick="toggleBmsPoll()">&#9654; Auto-Poll ON</button>
+          <button class="btn btn-outline btn-sm" onclick="manualBmsQuery()" id="bmsManualBtn">Query Now (#H0)</button>
+          <span style="font-size:11px;color:var(--text-muted);font-family:var(--mono);" id="bmsPollStatus">Polling every 2s</span>
+        </div>
+        <div class="status-bar" id="bmsFlags"></div>
+      </div></div>
+
+      <!-- BMS Command Center -->
+      <div class="card"><div class="card-header">BMS Command Center</div><div class="card-body">
+        <div class="form-group" style="margin-bottom:10px;"><label>Preset Command</label>
+          <select id="bmsCmdSelect" onchange="onBmsCmdSelect()" style="width:100%;"></select>
+        </div>
+        <div id="bmsCmdDesc" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-family:var(--mono);min-height:16px;"></div>
+        <div class="form-group" style="margin-bottom:8px;"><label>Value (decimal or hex)</label>
+          <input type="text" id="bmsCmdValue" placeholder="e.g. 16 or 0x0010" oninput="buildBmsHex()">
+        </div>
+        <div class="form-group" style="margin-bottom:10px;"><label>Hex Frame (CRC appended by firmware)</label>
+          <input type="text" id="bmsCmdHex" readonly style="color:var(--accent-cyan);">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="sendBmsPreset()" id="bmsSendBtn" style="margin-bottom:14px;">Send &#9654;</button>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+          <div class="form-group" style="margin-bottom:8px;"><label>Quick ASCII</label>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="bmsAsciiInput" placeholder="#H0" style="flex:1;">
+              <button class="btn btn-primary btn-sm" onclick="sendBmsAsciiCmd()">Send</button>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Custom Hex (space-sep)</label>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="bmsHexInput" placeholder="02 06 9B 4C 00 01" style="flex:1;">
+              <button class="btn btn-primary btn-sm" onclick="sendBmsHexCmd()">Send</button>
+            </div>
           </div>
         </div>
-        <div class="form-group" style="margin-bottom:12px;"><label>Custom Command</label>
-          <div style="display:flex;gap:8px;"><input type="text" id="invCmdInput" placeholder="e.g. QPIGS" style="flex:1;"><button class="btn btn-primary" id="invSendBtn" onclick="sendInvCustom()">Send &#9654;</button></div>
-        </div>
-        <div class="form-group"><label>Inverter Settings</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="invSettingsBtns"></div>
-        </div>
-      </div></div>
-      <div class="card"><div class="card-header">Response</div><div class="card-body">
-        <div id="invCmdResp" class="console-output" style="min-height:200px;max-height:500px;"><div style="color:var(--text-muted);">Send a command to see the response...</div></div>
+        <div id="bmsCmdResponse" class="console-output" style="margin-top:10px;min-height:80px;max-height:180px;"></div>
       </div></div>
     </div>
-    <div class="card"><div class="card-header">Command History</div><div class="card-body">
-      <div id="cmdHistory" class="console-output" style="max-height:300px;"></div>
+
+    <!-- BMS Metrics -->
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric green"><div class="metric-label">Pack Voltage</div><div class="metric-value"><span id="b_pack_v">&#8212;</span><span class="metric-unit">V</span></div></div>
+      <div class="metric amber"><div class="metric-label">Current</div><div class="metric-value"><span id="b_current">&#8212;</span><span class="metric-unit">A</span></div></div>
+      <div class="metric blue"><div class="metric-label">SOC</div><div class="metric-value"><span id="b_soc">&#8212;</span><span class="metric-unit">%</span></div></div>
+      <div class="metric purple"><div class="metric-label">SOH</div><div class="metric-value"><span id="b_soh">&#8212;</span><span class="metric-unit">%</span></div></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric cyan"><div class="metric-label">Capacity Left</div><div class="metric-value"><span id="b_cap_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
+      <div class="metric cyan"><div class="metric-label">Energy Left</div><div class="metric-value"><span id="b_energy_left">&#8212;</span><span class="metric-unit">Ah</span></div></div>
+      <div class="metric amber"><div class="metric-label">Charge Cycles</div><div class="metric-value"><span id="b_cycles">&#8212;</span></div></div>
+      <div class="metric red"><div class="metric-label">Cell Delta</div><div class="metric-value"><span id="b_delta">&#8212;</span><span class="metric-unit">mV</span></div></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric green"><div class="metric-label">Min Cell V</div><div class="metric-value"><span id="b_min_cv">&#8212;</span><span class="metric-unit">V</span></div></div>
+      <div class="metric green"><div class="metric-label">Max Cell V</div><div class="metric-value"><span id="b_max_cv">&#8212;</span><span class="metric-unit">V</span></div></div>
+      <div class="metric red"><div class="metric-label">Min Temp</div><div class="metric-value"><span id="b_min_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+      <div class="metric red"><div class="metric-label">Max Temp</div><div class="metric-value"><span id="b_max_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="metric purple"><div class="metric-label">MOSFET Temp</div><div class="metric-value"><span id="b_mos_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+      <div class="metric purple"><div class="metric-label">Ambient Temp</div><div class="metric-value"><span id="b_amb_t">&#8212;</span><span class="metric-unit">&#176;C</span></div></div>
+      <div class="metric blue"><div class="metric-label">BMS State</div><div class="metric-value" style="font-size:16px;"><span id="b_state">&#8212;</span></div></div>
+      <div class="metric blue"><div class="metric-label">Cell Count</div><div class="metric-value"><span id="b_cell_count">&#8212;</span></div></div>
+    </div>
+
+    <!-- Cell charts -->
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="card"><div class="card-header">Cell Voltages</div><div class="card-body"><div id="bCells" class="bms-list"></div></div></div>
+      <div class="card"><div class="card-header">Cell Temperatures</div><div class="card-body"><div id="bTemps" class="bms-list"></div></div></div>
+    </div>
+
+    <!-- BMS Frame Log -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">BMS Frame Log <button class="btn btn-outline btn-sm" onclick="clearBmsLog()">Clear</button></div>
+      <div class="card-body"><div id="bmsLog" class="console-output" style="max-height:220px;"></div></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ COMMANDS ═══════════════ -->
+<div class="tab-content" id="tab-commands">
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card"><div class="card-header">Send Inverter Command</div><div class="card-body">
+      <div class="form-group" style="margin-bottom:12px;"><label>Quick Commands</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QPIGS')">QPIGS</button>
+          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QMOD')">QMOD</button>
+          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QPIWS')">QPIWS</button>
+          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QID')">QID</button>
+          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QVFW')">QVFW</button>
+          <button class="btn btn-outline btn-sm" onclick="sendInvCmd('QFLAG')">QFLAG</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Custom Command</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="invCmdInput" placeholder="e.g. QPIGS" style="flex:1;">
+          <button class="btn btn-primary" onclick="sendInvCustom()">Send &#9654;</button>
+        </div>
+      </div>
+    </div></div>
+    <div class="card"><div class="card-header">Response</div><div class="card-body">
+      <div id="invCmdResp" class="console-output" style="min-height:180px;max-height:400px;"><div style="color:var(--text-muted);font-family:var(--mono);font-size:12px;">Send a command to see the response...</div></div>
     </div></div>
   </div>
 
-  <!-- LOGS TAB -->
-  <div class="tab-content" id="tab-logs">
-    <div class="card"><div class="card-header">Live Log <button class="btn btn-outline btn-sm" onclick="clearLog()">Clear</button></div>
-    <div class="card-body"><div id="liveLog" class="console-output" style="max-height:600px;"></div></div></div>
+  <!-- Quick Settings Panel -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header">Inverter Quick Settings <span class="badge" style="background:rgba(245,158,11,0.2);color:var(--amber);border-color:rgba(245,158,11,0.3);">WRITE</span></div>
+    <div class="card-body" id="invQuickSettings" style="max-height:520px;overflow-y:auto;"></div>
   </div>
 
+  <div class="card">
+    <div class="card-header">Command History</div>
+    <div class="card-body"><div id="cmdHistory" class="console-output" style="max-height:300px;"></div></div>
+  </div>
 </div>
 
+<!-- ═══════════════ SETTINGS ═══════════════ -->
+<div class="tab-content" id="tab-settings">
+  <div class="settings-nav" id="settingsNav"></div>
+  <div id="settingsContent"></div>
+</div>
+
+<!-- ═══════════════ LOGS ═══════════════ -->
+<div class="tab-content" id="tab-logs">
+  <div class="card">
+    <div class="card-header">Live Log <button class="btn btn-outline btn-sm" onclick="clearLog()">Clear</button></div>
+    <div class="card-body"><div id="liveLog" class="console-output" style="max-height:600px;"></div></div>
+  </div>
+</div>
+
+</div><!-- /.main -->
 <script src="./app.js"></script>
 </body>
 </html>
