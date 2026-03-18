@@ -359,9 +359,11 @@ function applyBmsTelemetry(o){
   setM('bms_amb_temp',  o.amb_temp, 1);
   setM('bms_cell_count',o.cell_count,0);
 
-  /* cell delta */
-  if(o.min_cell_v!=null&&o.max_cell_v!=null)
-    setM('bms_delta',((o.max_cell_v-o.min_cell_v)*1000),0);
+  /* cell delta — firmware sends in V (already divided by 1000); display as mV */
+  const deltaV = o.cell_delta != null && o.cell_delta > 0
+    ? o.cell_delta * 1000  /* firmware sends V → convert to mV */
+    : (o.min_cell_v != null && o.max_cell_v != null ? (o.max_cell_v - o.min_cell_v) * 1000 : null);
+  setM('bms_delta', deltaV, 0);
 
   /* state + flags */
   if(o.flags){
@@ -422,34 +424,64 @@ function logCorrelation(){
 }
 
 /* ── BMS THRESHOLD DECODER ───────────────────────────────── */
-/* Decodes #val1#val2...& ASCII response from Get Thresholds command */
-const BMS_THR_LABELS=[
-  'Reserved','Cell Count','Factory Capacity (Ah)','Balance Trigger (mV)','Cell OVP (mV)',
-  'Cell OVP-R (mV)','Charge OCP (A)','Charge OTP (°C)','Charge OTP-R (°C)','Cell UVP (mV)',
-  'Cell UVP-R (mV)','Discharge OCP (A)','Discharge OTP (°C)','Discharge OTP-R (°C)',
-  'Sleep Hour','Sleep Minute','Sleep Enable','Reserved','Reserved','Max SOC (%)',
-  'Cell V Min (mV)','Cell V Max (mV)','Reserved','Reserved','Temp (×0.01°C)',
-  'Max Charge A','Cell Count Act','Reserved','Full SOC (%)','Reserved',
-  'Capacity (Wh)','Reserved','Capacity Full (mWh)','Temp Threshold (°C)','SOC (%)',
-  'Reserved','Reserved','Discharge Cutoff (mV)','Reserved','Reserved',
-  'Reserved','Reserved','Reserved','Reserved','Reserved','Reserved','Reserved','Reserved'
-];
+/* Positions from BMS Commands Reference Sheet (user-provided table).
+   Response to "Get Thresholds" (02 06 9B 7C 00 01 + CRC) is #-delimited ASCII.
+   Positions are 0-indexed fields after stripping the leading '#'. */
+let lastThresholds = null; // stores last decoded threshold values
+
 function decodeBmsThreshold(hexStr){
-  /* hexStr is the resp_hex field from bms_resp which is either raw hex bytes or the ASCII text */
-  /* Try to extract #val#val...& pattern directly from ASCII */
-  const m=hexStr.match(/#([\d#]+)&/);
-  if(!m) return null;
-  const vals=m[1].split('#').map(Number);
-  return vals.map((v,i)=>({label:BMS_THR_LABELS[i]||('Field '+i),raw:v,idx:i}));
+  /* Convert hex bytes back to ASCII if needed */
+  let ascii = hexStr;
+  if(/^[0-9a-fA-F\s]+$/.test(hexStr.trim())){
+    try{
+      const bytes=hexStr.trim().split(/\s+/).map(h=>parseInt(h,16));
+      ascii=bytes.map(b=>String.fromCharCode(b)).join('');
+    }catch{ return null; }
+  }
+  /* Extract #val#val...& or &val#val...& */
+  const clean=ascii.replace(/^[&#\s]+/,'').replace(/[&#\s]+$/,'');
+  if(!clean.includes('#')) return null;
+  const fields=clean.split('#').map(s=>+s.trim());
+  if(fields.length < 10) return null;
+
+  const f1=(i)=>i<fields.length?fields[i]:0;
+  const f2=(hi,lo)=>f1(hi)*256+f1(lo);   // 2 bytes big-endian
+  const fs=(i)=>f1(i)>127?f1(i)-256:f1(i); // signed byte
+
+  const result=[
+    {label:'Cell UVP',           value:f2(5,6),           unit:'mV',  cmd:'PBDV'},
+    {label:'Cell OVP',           value:f2(7,8),           unit:'mV',  cmd:'PCVV'},
+    {label:'Cell Count',         value:f1(9),             unit:'cells',cmd:''},
+    {label:'Cell OVPR',          value:f2(7,8)-f1(22),    unit:'mV',  cmd:''},
+    {label:'DOC (Disch. OC)',    value:f1(20),            unit:'A',   cmd:''},
+    {label:'COC (Chg. OC)',      value:f1(12),            unit:'A',   cmd:''},
+    {label:'Charge OTP',         value:f1(16),            unit:'°C',  cmd:''},
+    {label:'Discharge OTP',      value:f1(17),            unit:'°C',  cmd:''},
+    {label:'Factory Capacity',   value:f1(21),            unit:'Ah',  cmd:''},
+    {label:'Cell UVPR',          value:f2(5,6)+f1(23),    unit:'mV',  cmd:''},
+    {label:'Balance Trigger V',  value:f2(24,25),         unit:'mV',  cmd:''},
+    {label:'Discharge OTR',      value:f1(27),            unit:'°C',  cmd:''},
+    {label:'Charge OTPR',        value:f1(28),            unit:'°C',  cmd:''},
+    {label:'Min OTR',            value:fs(29),            unit:'°C',  cmd:''},
+    {label:'Min OTP',            value:f1(30),            unit:'°C',  cmd:''},
+    {label:'Sleep Hour',         value:f1(34),            unit:'h',   cmd:''},
+    {label:'Sleep Min',          value:f1(35),            unit:'min', cmd:''},
+  ];
+  lastThresholds = {};
+  result.forEach(r => { lastThresholds[r.label] = r; });
+  return result;
 }
 
 function renderThresholdTable(fields){
   if(!fields) return null;
-  const rows=fields.filter(f=>f.raw!==0||f.idx<5).map(f=>
-    `<tr><td style="color:var(--text-muted);padding:3px 10px 3px 0;font-size:11px;">${f.label}</td>`+
-    `<td style="font-family:var(--mono);color:var(--accent-cyan);font-size:12px;">${f.raw}</td></tr>`
+  const rows=fields.map(f=>
+    `<tr>
+      <td style="color:var(--text-muted);padding:4px 12px 4px 0;font-size:11px;white-space:nowrap;">${f.label}</td>
+      <td style="font-family:var(--mono);color:var(--accent-cyan);font-size:12px;padding:4px 8px 4px 0;">${f.value} ${f.unit}</td>
+    </tr>`
   ).join('');
-  return `<div style="overflow-y:auto;max-height:260px;"><table style="border-collapse:collapse;width:100%;">${rows}</table></div>`;
+  return `<div style="overflow-y:auto;max-height:300px;margin-top:4px;">
+    <table style="border-collapse:collapse;width:100%;">${rows}</table></div>`;
 }
 
 /* ── FLOW DIAGRAM ────────────────────────────────────────── */
