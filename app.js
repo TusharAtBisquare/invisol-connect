@@ -246,6 +246,35 @@ function applyTelemetry(o){
   lastTelemetry=o;
   $('dashNoData').style.display='none'; $('dashData').style.display='block';
 
+  const invOnline = o.connected !== false; // true when inverter UART has data
+
+  /* inverter online/offline badge */
+  const ib=$('invBadge');
+  if(ib){
+    ib.textContent = invOnline ? 'INV: ONLINE' : 'INV: OFFLINE';
+    ib.style.background = invOnline ? 'var(--accent-green)' : 'var(--accent-red)';
+  }
+
+  if(!invOnline){
+    /* inverter UART has no data — clear all metrics to dashes */
+    const dash=()=>null;
+    ['m_grid_v','m_grid_f','m_out_v','m_out_f','m_out_w','m_out_va',
+     'm_load_pct','m_bus_v','m_bat_v','m_bat_scc','m_bat_cap',
+     'm_chg_a','m_dis_a','m_temp','m_pv_v','m_pv_a','m_pv_w'
+    ].forEach(id=>{ const el=$(id); if(el) el.innerHTML='&#8212;'; });
+
+    $('statusFlags').innerHTML='<span style="color:var(--accent-amber)">&#9888; Inverter UART offline — no data</span>';
+    $('modeBadge').className='mode-badge mode-S';
+    $('modeIcon').innerHTML='&#9888;';
+    $('modeText').textContent='OFFLINE';
+    $('warningList').innerHTML='<div class="warning-item active">&#9888; Inverter not responding</div>';
+    const wc=$('warningCount'); if(wc){wc.textContent='1'; wc.style.background='var(--accent-amber)';}
+    const fb=$('flowStatus'); if(fb) fb.textContent='OFFLINE';
+    updateFlow({...o, pv_w:0, pv_v:0, pv_a:0, grid_v:0, grid_hz:0, out_w:0, load_pct:0, bat_v:0, bat_chg_a:0, bat_dis_a:0, bat_soc:0, mode_code:'S', mode_name:'OFFLINE'});
+    addRawLog('RX','TEL inv OFFLINE (UART not connected)');
+    return;
+  }
+
   /* map BLE fields to SoftAP metric IDs */
   setM('m_grid_v',  o.grid_v,  1); setM('m_grid_f',  o.grid_hz, 1);
   setM('m_out_v',   o.out_v,   1); setM('m_out_f',   o.out_hz,  1);
