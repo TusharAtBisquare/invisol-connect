@@ -77,7 +77,7 @@ const INV_QUICK_SETTINGS = [
 ];
 
 const BMS_COMMANDS = [
-  {label:'Get Thresholds',          base:[0x02,0x06,0x9B,0x7C], fixed:0x0001, bytes:2, littleEndian:false, desc:'Read all parameters at once'},
+  {label:'Get Thresholds',          base:[0x02,0x06,0x9B,0x7C], bytes:0, desc:'Read all parameters (short frame: 02 06 9B 7C + CRC)'},
   {label:'Cell Count',              base:[0x02,0x06,0x9B,0xC5], bytes:1, min:3, max:24, desc:'3-24 cells (Doc assumption: 1-byte write)'},
   {label:'Factory Capacity',        base:[0x02,0x06,0x9B,0xC7], bytes:1, min:5, max:250, desc:'5-250 Ah (Doc assumption: 1-byte write)'},
   {label:'Balance Trigger Voltage', base:[0x02,0x06,0x9B,0xBF], bytes:2, littleEndian:true, desc:'2-byte little-endian write'},
@@ -646,6 +646,23 @@ function handleBmsResp(obj){
     el.innerHTML+=`<div class="console-line"><span class="console-dir tx">TX</span><span class="console-data"><span style="font-size:10px;color:var(--accent-cyan);">${escapeHtml(obj.sent_hex)}</span></span></div>`;
   }
   el.innerHTML+=`<div class="console-line"><span class="console-dir rx">RX</span><span class="console-data">[${escapeHtml(obj.mode)}] <span style="font-size:10px;color:var(--text-muted);">${escapeHtml(text)}</span></span></div>`;
+  if(obj.fallback_poll_frame){
+    el.innerHTML+=`<div class="console-line"><span class="console-dir rx">INF</span><span class="console-data">No direct reply; used latest valid polled BMS frame.</span></div>`;
+  }
+  if(obj.fallback_ascii_h0){
+    el.innerHTML+=`<div class="console-line"><span class="console-dir rx">INF</span><span class="console-data">No HEX reply; queried #H0 and used ASCII BMS frame.</span></div>`;
+  }
+
+  const asciiSnap = decodeAsciiBmsSnapshotFromHex(text);
+  if(asciiSnap){
+    el.innerHTML+=`<div class="console-line"><span class="console-dir rx" style="color:var(--accent-green);">ASCII</span><span class="console-data">${escapeHtml(asciiSnap.ascii)}</span></div>`;
+    el.innerHTML+=renderAsciiBmsSnapshot(asciiSnap);
+    addRawLog('INF','BMS ASCII decoded: cells='+asciiSnap.cellCount+' pack='+fmtNum(asciiSnap.packV,2)+'V soc='+fmtNum(asciiSnap.soc,0)+'% delta='+fmtNum(asciiSnap.deltaMv,0)+'mV');
+    applyBmsTelemetry(asciiSnap.telemetry);
+    logScrollBottom(el);
+    addBmsLog('['+obj.mode+'] '+text);
+    return;
+  }
 
   const rxBytes = parseHexBytes(text);
   const crcInfo = (rxBytes && rxBytes.length>=3) ? verifyModbusCrc(rxBytes) : null;
@@ -671,26 +688,116 @@ function handleBmsResp(obj){
         <div style="font-size:11px;color:var(--accent-amber);margin-bottom:4px;">&#9881; Decoded Threshold Values:</div>${table}</div>`;
       addRawLog('INF','BMS threshold decoded: '+thrFields.filter(f=>f.value!==0).map(f=>f.label+'='+f.value).join(', '));
     }
-  } else {
-    const asciiStr=hexToAscii(text);
-    if(asciiStr){
-      el.innerHTML+=`<div class="console-line"><span class="console-dir rx" style="color:var(--accent-green);">ASCII</span><span class="console-data">${escapeHtml(asciiStr)}</span></div>`;
-      addRawLog('INF','BMS ASCII: '+asciiStr);
-    }
   }
 
   logScrollBottom(el);
   addBmsLog('['+obj.mode+'] '+text);
 }
 
-/* Convert hex string "02 06 9B..." to ASCII where printable */
-function hexToAscii(hexStr){
-  if(!hexStr||!hexStr.match(/^[0-9a-fA-F ]+$/)) return null;
-  try{
-    const bytes=hexStr.trim().split(/\s+/).map(h=>parseInt(h,16));
-    const s=bytes.map(b=>b>=32&&b<127?String.fromCharCode(b):'.').join('');
-    return s.includes('#')?bytes.map(b=>String.fromCharCode(b)).join('').replace(/[^\x20-\x7e#&]/g,''):null;
-  }catch{return null;}
+function decodeAsciiBmsSnapshotFromHex(hexStr){
+  const bytes=parseHexBytes(hexStr);
+  if(!bytes||!bytes.length) return null;
+  const asciiRaw=bytes.map(b=>String.fromCharCode(b)).join('').replace(/[\r\n\0]/g,'');
+  if(!asciiRaw.includes('#')) return null;
+
+  const wrapped=asciiRaw.match(/&([^&]+)&?/);
+  const body=(wrapped?wrapped[1]:asciiRaw).replace(/^&|&$/g,'');
+  const tok=body.split('#').filter(x=>x!==''&&x!=null);
+  if(tok.length<20) return null;
+
+  const nums=tok.map(x=>{ const v=parseInt(x,10); return Number.isFinite(v)?v:null; });
+  const nAt=i=>(i>=0&&i<nums.length&&nums[i]!=null)?nums[i]:null;
+  const s16=v=>(v!=null?(v>32767?v-65536:v):null);
+
+  const cellCount=Math.max(0,Math.min(24,nAt(0)||0));
+  const cellV=[];
+  for(let i=0;i<cellCount;i++){ const mv=nAt(1+i); if(mv!=null) cellV.push(mv/1000); }
+  const cellT=[];
+  for(let i=25;i<=40;i++){ const t=nAt(i); if(t!=null) cellT.push(t); }
+
+  const packV = nAt(48)!=null ? nAt(48)/100 : null;
+  const soc   = nAt(49);
+  const soh   = nAt(52);
+  const capLeft = nAt(43);
+  const energyLeft = nAt(54)!=null ? nAt(54)/10 : null;
+  const cycles = nAt(55);
+  const minCellV = nAt(44)!=null ? nAt(44)/1000 : null;
+  const maxCellV = nAt(45)!=null ? nAt(45)/1000 : null;
+  const minTemp = nAt(46);
+  const maxTemp = nAt(47);
+  const mosTemp = nAt(41);
+  const ambTemp = nAt(42);
+  const current = s16(nAt(57))!=null ? s16(nAt(57))/100 : null;
+  const rawDelta = nAt(56);
+  const expectedDeltaMv=(minCellV!=null&&maxCellV!=null)?((maxCellV-minCellV)*1000):null;
+  let deltaMv=null;
+  if(rawDelta!=null) deltaMv = rawDelta>1000 ? rawDelta/1000 : rawDelta;
+  if(expectedDeltaMv!=null){
+    if(deltaMv==null || Math.abs(deltaMv-expectedDeltaMv)>200) deltaMv=expectedDeltaMv;
+  }
+  const deltaV = deltaMv!=null ? deltaMv/1000 : null;
+
+  const flags={
+    bms_state:nAt(50)||0,
+    mosfet_fail:(nAt(51)||0)!==0,
+    balancing:(nAt(53)||0)!==0,
+    ca_on:(nAt(59)||0)!==0,
+    load:(nAt(60)||0)!==0
+  };
+
+  const rows=[
+    ['Cell Count', cellCount, 'cells'],
+    ['Pack Voltage', packV, 'V'],
+    ['SOC', soc, '%'],
+    ['SOH', soh, '%'],
+    ['Current', current, 'A'],
+    ['Cell Delta', deltaMv, 'mV'],
+    ['Capacity Left', capLeft, 'Ah'],
+    ['Energy Left', energyLeft, 'Wh'],
+    ['Factory Capacity', nAt(58), 'Ah'],
+    ['Charge Cycles', cycles, ''],
+    ['Min Cell', minCellV, 'V'],
+    ['Max Cell', maxCellV, 'V'],
+    ['Min Temp', minTemp, 'C'],
+    ['Max Temp', maxTemp, 'C'],
+    ['MOS Temp', mosTemp, 'C'],
+    ['Ambient Temp', ambTemp, 'C'],
+  ];
+
+  return {
+    ascii: wrapped ? `&${body}&` : asciiRaw,
+    tokenCount: tok.length,
+    cellCount,
+    cellV,
+    packV,soc,soh,current,deltaMv,
+    telemetry:{
+      pack_v:packV,soc,soh,current,cell_delta:deltaV,cap_left:capLeft,energy_left:energyLeft,
+      cycles,min_cell_v:minCellV,max_cell_v:maxCellV,min_temp:minTemp,max_temp:maxTemp,
+      mos_temp:mosTemp,amb_temp:ambTemp,cell_count:cellCount,cell_v:cellV,cell_t:cellT,flags
+    },
+    rows
+  };
+}
+
+function renderAsciiBmsSnapshot(snap){
+  const rows=snap.rows.map(r=>{
+    const rawVal = r[1];
+    let txt=PH;
+    if(rawVal!=null && !isNaN(+rawVal)){
+      const dec = (r[2]==='V') ? 3 : ((r[2]==='A')?2:0);
+      txt = fmtClean(rawVal, dec);
+    }
+    return `<tr>
+      <td style="padding:4px 10px 4px 0;color:var(--text-muted);font-size:11px;">${escapeHtml(r[0])}</td>
+      <td style="padding:4px 10px 4px 0;color:var(--accent-cyan);font-family:var(--mono);font-size:12px;">${escapeHtml(txt)}${r[2]?` ${escapeHtml(r[2])}`:''}</td>
+    </tr>`;
+  }).join('');
+  const cells=snap.cellV.length?snap.cellV.map((v,i)=>`C${i+1}:${v.toFixed(3)}V`).join(' | '):'No cell values';
+  return `<div style="margin:8px 0 4px;padding:8px 10px;background:#050a14;border-radius:var(--radius-sm);border:1px solid var(--border);">
+    <div style="font-size:11px;color:var(--accent-amber);margin-bottom:6px;">Decoded ASCII BMS Frame (${snap.tokenCount} fields)</div>
+    <table style="border-collapse:collapse;width:100%;"><tbody>${rows}</tbody></table>
+    <div style="margin-top:6px;font-size:11px;color:var(--text-secondary);font-family:var(--mono);word-break:break-word;">${escapeHtml(cells)}</div>
+  </div>`;
 }
 
 /* ── SEND COMMAND (Commands tab) ─────────────────────────── */
@@ -828,11 +935,15 @@ function onBmsCommandSelect(){
   if(isNaN(idx)){ if(desc)desc.textContent=''; if(valEl){valEl.value='';valEl.disabled=false;} if(hexEl)hexEl.value=''; return; }
   const cmd=BMS_COMMANDS[idx];
   if(desc) desc.textContent=cmd.desc||'';
+  const bytes = cmd.bytes || 0;
   if(valEl){
     if(cmd.fixed!==undefined){
-      if((cmd.bytes||2)===1) valEl.value='0x'+(cmd.fixed & 0xFF).toString(16).padStart(2,'0').toUpperCase();
+      if(bytes===1) valEl.value='0x'+(cmd.fixed & 0xFF).toString(16).padStart(2,'0').toUpperCase();
       else valEl.value='0x'+(cmd.fixed & 0xFFFF).toString(16).padStart(4,'0').toUpperCase();
       valEl.disabled=true;
+    } else if(bytes===0) {
+      valEl.disabled=true;
+      valEl.value='';
     } else {
       valEl.disabled=false;
       valEl.value='';
@@ -850,9 +961,13 @@ function parseBmsInputValue(s){
 }
 
 function encodeBmsValue(cmd, value){
-  const bytes = cmd.bytes || 2;
+  const bytes = cmd.bytes || 0;
   if(cmd.min!=null && value < cmd.min) return { err:`Value below range (${cmd.min}..${cmd.max ?? 'N/A'})` };
   if(cmd.max!=null && value > cmd.max) return { err:`Value above range (${cmd.min ?? 'N/A'}..${cmd.max})` };
+
+  if(bytes===0){
+    return { bytes:[] };
+  }
 
   if(bytes===1){
     if(value < -128 || value > 255) return { err:'1-byte value out of range (-128..255)' };
@@ -874,9 +989,10 @@ function buildBmsHex(){
   if(!sel||!hexEl) return;
   const idx=parseInt(sel.value,10); if(isNaN(idx)){hexEl.value='';return;}
   const cmd=BMS_COMMANDS[idx];
+  const bytes = cmd.bytes || 0;
 
-  const value = (cmd.fixed!==undefined) ? cmd.fixed : parseBmsInputValue(valEl?.value);
-  if(value==null){ hexEl.value=''; return; }
+  const value = (cmd.fixed!==undefined) ? cmd.fixed : (bytes===0 ? 0 : parseBmsInputValue(valEl?.value));
+  if(bytes>0 && value==null){ hexEl.value=''; return; }
 
   const enc = encodeBmsValue(cmd, value);
   if(enc.err){
