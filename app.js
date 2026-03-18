@@ -77,24 +77,24 @@ const INV_QUICK_SETTINGS = [
 ];
 
 const BMS_COMMANDS = [
-  {label:'Get Thresholds',          base:[0x02,0x06,0x9B,0x7C], fixed:0x0001, desc:'Read all parameters at once'},
-  {label:'Cell Count',              base:[0x02,0x06,0x9B,0xC5],               desc:'3-24 cells'},
-  {label:'Factory Capacity',        base:[0x02,0x06,0x9B,0xC7],               desc:'5-250 Ah'},
-  {label:'Balance Trigger Voltage', base:[0x02,0x06,0x9B,0xBF],               desc:'Balance start voltage'},
-  {label:'Cell OVP',                base:[0x02,0x06,0x9B,0xAF],               desc:'Cell over-voltage protection'},
-  {label:'Cell OVPR',               base:[0x02,0x06,0x9B,0xF2],               desc:'Cell OVP recovery voltage'},
-  {label:'Charge Over Current',     base:[0x02,0x06,0x9B,0xB3],               desc:'Charge over-current limit'},
-  {label:'Charge OTP',              base:[0x02,0x06,0x9B,0xC1],               desc:'Charge over-temperature protection'},
-  {label:'Charge OTPR',             base:[0x02,0x06,0x9B,0xA2],               desc:'Charge OTP recovery temperature'},
-  {label:'Cell UVP',                base:[0x02,0x06,0x9B,0xAD],               desc:'Cell under-voltage protection'},
-  {label:'Cell UVPR',               base:[0x02,0x06,0x9B,0xF4],               desc:'Cell UVP recovery voltage'},
-  {label:'Discharge Over Current',  base:[0x02,0x06,0x9B,0xD6],               desc:'Discharge over-current limit'},
-  {label:'Discharge OTP',           base:[0x02,0x06,0x9B,0xB9],               desc:'Discharge over-temperature protection'},
-  {label:'Discharge OTPR',          base:[0x02,0x06,0x9B,0xE3],               desc:'Discharge OTP recovery temperature'},
-  {label:'Sleep Hour',              base:[0x02,0x06,0x9B,0x3E],               desc:'Sleep hour (0-23)'},
-  {label:'Sleep Minute',            base:[0x02,0x06,0x9B,0x3D],               desc:'Sleep minute (0-59)'},
-  {label:'Sleep Enable',            base:[0x02,0x06,0x9B,0x4C], fixed:0x0001, desc:'Enable sleep mode'},
-  {label:'Sleep Disable',           base:[0x02,0x06,0x9B,0x4C], fixed:0x0000, desc:'Disable sleep mode'},
+  {label:'Get Thresholds',          base:[0x02,0x06,0x9B,0x7C], fixed:0x0001, bytes:2, littleEndian:false, desc:'Read all parameters at once'},
+  {label:'Cell Count',              base:[0x02,0x06,0x9B,0xC5], bytes:1, min:3, max:24, desc:'3-24 cells (Doc assumption: 1-byte write)'},
+  {label:'Factory Capacity',        base:[0x02,0x06,0x9B,0xC7], bytes:1, min:5, max:250, desc:'5-250 Ah (Doc assumption: 1-byte write)'},
+  {label:'Balance Trigger Voltage', base:[0x02,0x06,0x9B,0xBF], bytes:2, littleEndian:true, desc:'2-byte little-endian write'},
+  {label:'Cell OVP',                base:[0x02,0x06,0x9B,0xAF], bytes:1, desc:'Cell over-voltage protection (Doc assumption: 1-byte write)'},
+  {label:'Cell OVPR',               base:[0x02,0x06,0x9B,0xF2], bytes:1, desc:'Cell OVP recovery voltage (Doc assumption: 1-byte write)'},
+  {label:'COC',                     base:[0x02,0x06,0x9B,0xB3], bytes:1, desc:'Charge over-current limit (Doc assumption: 1-byte write)'},
+  {label:'Charge OTP',              base:[0x02,0x06,0x9B,0xC1], bytes:1, desc:'Charge over-temperature protection (Doc assumption: 1-byte write)'},
+  {label:'Charge OTPR',             base:[0x02,0x06,0x9B,0xA2], bytes:1, desc:'Charge OTP recovery temperature (Doc assumption: 1-byte write)'},
+  {label:'Cell UVP',                base:[0x02,0x06,0x9B,0xAD], bytes:1, desc:'Cell under-voltage protection (Doc assumption: 1-byte write)'},
+  {label:'Cell UVPR',               base:[0x02,0x06,0x9B,0xF4], bytes:1, desc:'Cell UVP recovery voltage (Doc assumption: 1-byte write)'},
+  {label:'DOC',                     base:[0x02,0x06,0x9B,0xD6], bytes:1, desc:'Discharge over-current limit (Doc assumption: 1-byte write)'},
+  {label:'Discharge OTP',           base:[0x02,0x06,0x9B,0xB9], bytes:1, desc:'Discharge over-temperature protection (Doc assumption: 1-byte write)'},
+  {label:'Discharge OTR',           base:[0x02,0x06,0x9B,0xE3], bytes:1, desc:'Discharge OTP recovery temperature (Doc assumption: 1-byte write)'},
+  {label:'Sleep in Discharge Hour', base:[0x02,0x06,0x9B,0x3E], bytes:1, min:0, max:23, desc:'Hour 0-23'},
+  {label:'Sleep in Discharge Min',  base:[0x02,0x06,0x9B,0x3D], bytes:1, min:0, max:59, desc:'Minute 0-59'},
+  {label:'Sleep Enable',            base:[0x02,0x06,0x9B,0x4C], fixed:0x01, bytes:1, desc:'Enable sleep mode'},
+  {label:'Sleep Disable',           base:[0x02,0x06,0x9B,0x4C], fixed:0x00, bytes:1, desc:'Disable sleep mode'},
 ];
 
 /* ── STATE ───────────────────────────────────────────────── */
@@ -120,6 +120,38 @@ function escapeHtml(s){
 function fmtNum(v,dec){ if(v==null||v===''||isNaN(+v))return PH; return dec==null?String(v):(+v).toFixed(dec); }
 /* like fmtNum but strips trailing .0 / .00 — use for current, energy, etc. */
 function fmtClean(v,maxDec){ if(v==null||v===''||isNaN(+v))return PH; return String(parseFloat((+v).toFixed(maxDec))); }
+
+function parseHexBytes(hexStr){
+  if(!hexStr) return null;
+  const bytes = hexStr.trim().split(/\s+/)
+    .map(h=>parseInt(h,16))
+    .filter(v=>Number.isInteger(v) && v>=0 && v<=255);
+  return bytes.length ? bytes : null;
+}
+
+function bytesToHex(bytes){
+  return (bytes||[]).map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+}
+
+function crc16Modbus(bytes){
+  let crc=0xFFFF;
+  for(const b of bytes){
+    crc ^= b;
+    for(let i=0;i<8;i++) crc = (crc & 1) ? ((crc >> 1) ^ 0xA001) : (crc >> 1);
+  }
+  return crc & 0xFFFF;
+}
+
+function verifyModbusCrc(frameBytes){
+  if(!frameBytes || frameBytes.length < 3) return null;
+  const payload = frameBytes.slice(0,-2);
+  const rxLo = frameBytes[frameBytes.length-2];
+  const rxHi = frameBytes[frameBytes.length-1];
+  const calc = crc16Modbus(payload);
+  const calcLo = calc & 0xFF;
+  const calcHi = (calc >> 8) & 0xFF;
+  return { valid: calcLo===rxLo && calcHi===rxHi, calcLo, calcHi, rxLo, rxHi, payload };
+}
 
 function setM(id,v,dec){
   const el=$(id); if(!el)return;
@@ -359,11 +391,27 @@ function applyBmsTelemetry(o){
   setM('bms_amb_temp',  o.amb_temp, 1);
   setM('bms_cell_count',o.cell_count,0);
 
-  /* cell delta — firmware sends in V (already divided by 1000); display as mV */
-  const deltaV = o.cell_delta != null && o.cell_delta > 0
-    ? o.cell_delta * 1000  /* firmware sends V → convert to mV */
-    : (o.min_cell_v != null && o.max_cell_v != null ? (o.max_cell_v - o.min_cell_v) * 1000 : null);
-  setM('bms_delta', deltaV, 0);
+  /* cell delta shown in mV; tolerate both firmware styles (V or mV) */
+  let deltaMv = null;
+  const rawDelta = (o.cell_delta != null && !isNaN(+o.cell_delta)) ? (+o.cell_delta) : null;
+  const expectedMv = (o.min_cell_v != null && o.max_cell_v != null)
+    ? ((+o.max_cell_v - +o.min_cell_v) * 1000.0)
+    : null;
+  if (rawDelta != null) {
+    if (expectedMv != null) {
+      if (Math.abs(rawDelta - expectedMv) <= 5) deltaMv = rawDelta;
+      else if (Math.abs((rawDelta * 1000.0) - expectedMv) <= 5) deltaMv = rawDelta * 1000.0;
+      else if (rawDelta > 1000 && Math.abs((rawDelta / 1000.0) - expectedMv) <= 5) deltaMv = rawDelta / 1000.0;
+      else deltaMv = rawDelta < 1 ? (rawDelta * 1000.0) : rawDelta;
+    } else {
+      if (rawDelta < 1) deltaMv = rawDelta * 1000.0;
+      else if (rawDelta > 1000) deltaMv = rawDelta / 1000.0;
+      else deltaMv = rawDelta;
+    }
+  } else if (expectedMv != null) {
+    deltaMv = expectedMv;
+  }
+  setM('bms_delta', deltaMv, 0);
 
   /* state + flags */
   if(o.flags){
@@ -430,36 +478,35 @@ let lastThresholds = null; // stores last decoded threshold values
 
 function decodeBmsThreshold(hexStr){
   if(!hexStr) return null;
-  const bytes = hexStr.trim().split(/\s+/)
-    .map(h => parseInt(h, 16))
-    .filter(v => Number.isInteger(v) && v >= 0 && v <= 255);
-  if(bytes.length < 36) return null;
+  const bytes = parseHexBytes(hexStr);
+  if(!bytes || bytes.length < 36) return null;
 
   const b = (i) => (i >= 0 && i < bytes.length ? bytes[i] : 0);
-  const u16rev = (lo, hi) => ((b(hi) << 8) | b(lo)); /* docs: high+low (reversed) */
+  const hx = (i) => b(i).toString(16).padStart(2,'0').toUpperCase();
+  const u16rev = (lo, hi) => ((b(hi) << 8) | b(lo));
   const s8 = (i) => (b(i) > 127 ? b(i) - 256 : b(i));
 
   const cellUvp = u16rev(5, 6);
   const cellOvp = u16rev(7, 8);
 
   const result=[
-    {label:'Cell UVP',                value:cellUvp,            unit:'mV'},
-    {label:'Cell OVP',                value:cellOvp,            unit:'mV'},
-    {label:'Cell Count',              value:b(9),               unit:'cells'},
-    {label:'Cell OVPR',               value:cellOvp - b(22),    unit:'mV'},
-    {label:'DOC',                     value:b(20),              unit:'A'},
-    {label:'COC',                     value:b(12),              unit:'A'},
-    {label:'Charge OTP',              value:b(16),              unit:'C'},
-    {label:'Discharge OTP',           value:b(17),              unit:'C'},
-    {label:'Factory Capacity',        value:b(21),              unit:'Ah'},
-    {label:'Cell UVPR',               value:cellUvp + b(23),    unit:'mV'},
-    {label:'Balance Trigger Voltage', value:u16rev(24, 25),     unit:'mV'},
-    {label:'Discharge OTR',           value:b(27),              unit:'C'},
-    {label:'Charge OTPR',             value:b(28),              unit:'C'},
-    {label:'Min OTR',                 value:s8(29),             unit:'C'},
-    {label:'Min OTP',                 value:b(30),              unit:'C'},
-    {label:'Sleep in Discharge Hour', value:b(34),              unit:'h'},
-    {label:'Sleep in Discharge Min',  value:b(35),              unit:'min'},
+    {label:'Cell UVP', positions:'[5,6]', raw:`${hx(5)} ${hx(6)}`, formula:'rev16([5,6])', value:cellUvp, unit:'mV'},
+    {label:'Cell OVP', positions:'[7,8]', raw:`${hx(7)} ${hx(8)}`, formula:'rev16([7,8])', value:cellOvp, unit:'mV'},
+    {label:'Cell Count', positions:'[9]', raw:hx(9), formula:'u8([9])', value:b(9), unit:'cells'},
+    {label:'Cell OVPR', positions:'[7,8],[22]', raw:`${hx(7)} ${hx(8)} | ${hx(22)}`, formula:`Cell OVP - [22] => ${cellOvp} - ${b(22)}`, value:cellOvp - b(22), unit:'mV'},
+    {label:'DOC', positions:'[20]', raw:hx(20), formula:'u8([20])', value:b(20), unit:'A'},
+    {label:'COC', positions:'[12]', raw:hx(12), formula:'u8([12])', value:b(12), unit:'A'},
+    {label:'Charge OTP', positions:'[16]', raw:hx(16), formula:'u8([16])', value:b(16), unit:'C'},
+    {label:'Discharge OTP', positions:'[17]', raw:hx(17), formula:'u8([17])', value:b(17), unit:'C'},
+    {label:'Factory Capacity', positions:'[21]', raw:hx(21), formula:'u8([21])', value:b(21), unit:'Ah'},
+    {label:'Cell UVPR', positions:'[5,6],[23]', raw:`${hx(5)} ${hx(6)} | ${hx(23)}`, formula:`Cell UVP + [23] => ${cellUvp} + ${b(23)}`, value:cellUvp + b(23), unit:'mV'},
+    {label:'Balance Trigger Voltage', positions:'[24,25]', raw:`${hx(24)} ${hx(25)}`, formula:'rev16([24,25])', value:u16rev(24, 25), unit:'mV'},
+    {label:'Discharge OTR', positions:'[27]', raw:hx(27), formula:'u8([27])', value:b(27), unit:'C'},
+    {label:'Charge OTPR', positions:'[28]', raw:hx(28), formula:'u8([28])', value:b(28), unit:'C'},
+    {label:'Min OTR', positions:'[29]', raw:hx(29), formula:'s8([29])', value:s8(29), unit:'C'},
+    {label:'Min OTP', positions:'[30]', raw:hx(30), formula:'u8([30])', value:b(30), unit:'C'},
+    {label:'Sleep in Discharge Hour', positions:'[34]', raw:hx(34), formula:'u8([34])', value:b(34), unit:'h'},
+    {label:'Sleep in Discharge Min', positions:'[35]', raw:hx(35), formula:'u8([35])', value:b(35), unit:'min'},
   ];
   lastThresholds = {};
   result.forEach(r => { lastThresholds[r.label] = r; });
@@ -471,14 +518,26 @@ function renderThresholdTable(fields){
   const rows=fields.map(f=>
     `<tr>
       <td style="color:var(--text-muted);padding:4px 12px 4px 0;font-size:11px;white-space:nowrap;">${f.label}</td>
+      <td style="font-family:var(--mono);color:var(--text-secondary);font-size:11px;padding:4px 8px 4px 0;">${f.positions}</td>
+      <td style="font-family:var(--mono);color:var(--accent-amber);font-size:11px;padding:4px 8px 4px 0;">${f.raw}</td>
+      <td style="font-family:var(--mono);color:var(--text-muted);font-size:11px;padding:4px 8px 4px 0;">${f.formula}</td>
       <td style="font-family:var(--mono);color:var(--accent-cyan);font-size:12px;padding:4px 8px 4px 0;">${f.value} ${f.unit}</td>
     </tr>`
   ).join('');
-  return `<div style="overflow-y:auto;max-height:300px;margin-top:4px;">
-    <table style="border-collapse:collapse;width:100%;">${rows}</table></div>`;
+  return `<div style="overflow-y:auto;max-height:320px;margin-top:4px;">
+    <table style="border-collapse:collapse;width:100%;">
+      <thead><tr>
+        <th style="text-align:left;padding:4px 12px 4px 0;color:var(--text-muted);font-size:10px;">Parameter</th>
+        <th style="text-align:left;padding:4px 8px 4px 0;color:var(--text-muted);font-size:10px;">Position(s)</th>
+        <th style="text-align:left;padding:4px 8px 4px 0;color:var(--text-muted);font-size:10px;">Raw Bytes</th>
+        <th style="text-align:left;padding:4px 8px 4px 0;color:var(--text-muted);font-size:10px;">Formula</th>
+        <th style="text-align:left;padding:4px 8px 4px 0;color:var(--text-muted);font-size:10px;">Result</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
 }
 
-/* ── FLOW DIAGRAM ────────────────────────────────────────── */
+/* ?????? FLOW DIAGRAM ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????? */
 function updateFlow(o){
   const pvW   =+(o.pv_w||0),  pvV=+(o.pv_v||0), pvA=+(o.pv_a||0);
   const gridV =+(o.grid_v||0), gridF=+(o.grid_hz||0);
@@ -571,8 +630,7 @@ function handleInvResp(obj){
 
 /* ── BMS RESPONSE ────────────────────────────────────────── */
 function handleBmsResp(obj){
-  const text=obj.success?obj.resp_hex:('ERROR: '+(obj.error||'failed'));
-  /* log full response to raw log */
+  const text=obj.success?(obj.resp_hex||''):('ERROR: '+(obj.error||'failed'));
   addRawLog(obj.success?'RX':'ERR','BMS-CMD ['+obj.mode+'] '+text);
   const el=$('bmsCmdResponse'); if(!el) return;
   if(el.querySelector('[style*="color:var(--text-muted)"]')) el.innerHTML='';
@@ -584,12 +642,28 @@ function handleBmsResp(obj){
     return;
   }
 
-  /* show raw hex line */
+  if(obj.sent_hex){
+    el.innerHTML+=`<div class="console-line"><span class="console-dir tx">TX</span><span class="console-data"><span style="font-size:10px;color:var(--accent-cyan);">${escapeHtml(obj.sent_hex)}</span></span></div>`;
+  }
   el.innerHTML+=`<div class="console-line"><span class="console-dir rx">RX</span><span class="console-data">[${escapeHtml(obj.mode)}] <span style="font-size:10px;color:var(--text-muted);">${escapeHtml(text)}</span></span></div>`;
 
-  /* try to decode ASCII threshold response #val#val...& */
-  const asciiStr=hexToAscii(text);
-  const thrFields=decodeBmsThreshold(asciiStr||text);
+  const rxBytes = parseHexBytes(text);
+  const crcInfo = (rxBytes && rxBytes.length>=3) ? verifyModbusCrc(rxBytes) : null;
+  if(crcInfo){
+    const crcMsg = `CRC calc=${crcInfo.calcLo.toString(16).padStart(2,'0').toUpperCase()} ${crcInfo.calcHi.toString(16).padStart(2,'0').toUpperCase()} | rx=${crcInfo.rxLo.toString(16).padStart(2,'0').toUpperCase()} ${crcInfo.rxHi.toString(16).padStart(2,'0').toUpperCase()} => ${crcInfo.valid?'VALID':'INVALID'}`;
+    el.innerHTML+=`<div class="console-line"><span class="console-dir ${crcInfo.valid?'rx':'err'}">CRC</span><span class="console-data">${crcMsg}</span></div>`;
+    addRawLog(crcInfo.valid?'INF':'ERR','BMS '+crcMsg);
+  }
+
+  let thrFields = null;
+  if(rxBytes && rxBytes.length>=36){
+    if(crcInfo && crcInfo.valid){
+      thrFields = decodeBmsThreshold(text);
+    } else if(crcInfo && !crcInfo.valid){
+      el.innerHTML+=`<div class="console-line"><span class="console-dir err">ERR</span><span class="console-data">Threshold decode skipped (CRC INVALID)</span></div>`;
+    }
+  }
+
   if(thrFields){
     const table=renderThresholdTable(thrFields);
     if(table){
@@ -597,13 +671,16 @@ function handleBmsResp(obj){
         <div style="font-size:11px;color:var(--accent-amber);margin-bottom:4px;">&#9881; Decoded Threshold Values:</div>${table}</div>`;
       addRawLog('INF','BMS threshold decoded: '+thrFields.filter(f=>f.value!==0).map(f=>f.label+'='+f.value).join(', '));
     }
-  } else if(asciiStr){
-    el.innerHTML+=`<div class="console-line"><span class="console-dir rx" style="color:var(--accent-green);">ASCII</span><span class="console-data">${escapeHtml(asciiStr)}</span></div>`;
-    addRawLog('INF','BMS ASCII: '+asciiStr);
+  } else {
+    const asciiStr=hexToAscii(text);
+    if(asciiStr){
+      el.innerHTML+=`<div class="console-line"><span class="console-dir rx" style="color:var(--accent-green);">ASCII</span><span class="console-data">${escapeHtml(asciiStr)}</span></div>`;
+      addRawLog('INF','BMS ASCII: '+asciiStr);
+    }
   }
 
   logScrollBottom(el);
-  addBmsLog('['+obj.mode+'] '+(asciiStr||text));
+  addBmsLog('['+obj.mode+'] '+text);
 }
 
 /* Convert hex string "02 06 9B..." to ASCII where printable */
@@ -751,19 +828,69 @@ function onBmsCommandSelect(){
   if(isNaN(idx)){ if(desc)desc.textContent=''; if(valEl){valEl.value='';valEl.disabled=false;} if(hexEl)hexEl.value=''; return; }
   const cmd=BMS_COMMANDS[idx];
   if(desc) desc.textContent=cmd.desc||'';
-  if(valEl){ if(cmd.fixed!==undefined){valEl.value='0x'+cmd.fixed.toString(16).padStart(4,'0').toUpperCase();valEl.disabled=true;}else{valEl.disabled=false;valEl.value='';} }
+  if(valEl){
+    if(cmd.fixed!==undefined){
+      if((cmd.bytes||2)===1) valEl.value='0x'+(cmd.fixed & 0xFF).toString(16).padStart(2,'0').toUpperCase();
+      else valEl.value='0x'+(cmd.fixed & 0xFFFF).toString(16).padStart(4,'0').toUpperCase();
+      valEl.disabled=true;
+    } else {
+      valEl.disabled=false;
+      valEl.value='';
+    }
+  }
   buildBmsHex();
 }
 
+function parseBmsInputValue(s){
+  const t=(s||'').trim();
+  if(!t) return null;
+  if(/^[-+]?0x[0-9a-f]+$/i.test(t)) return parseInt(t,16);
+  if(/^[-+]?\d+$/.test(t)) return parseInt(t,10);
+  return null;
+}
+
+function encodeBmsValue(cmd, value){
+  const bytes = cmd.bytes || 2;
+  if(cmd.min!=null && value < cmd.min) return { err:`Value below range (${cmd.min}..${cmd.max ?? 'N/A'})` };
+  if(cmd.max!=null && value > cmd.max) return { err:`Value above range (${cmd.min ?? 'N/A'}..${cmd.max})` };
+
+  if(bytes===1){
+    if(value < -128 || value > 255) return { err:'1-byte value out of range (-128..255)' };
+    return { bytes:[value & 0xFF] };
+  }
+
+  if(bytes===2){
+    if(value < 0 || value > 0xFFFF) return { err:'2-byte value out of range (0..65535)' };
+    const v=value & 0xFFFF;
+    if(cmd.littleEndian===false) return { bytes:[(v>>8)&0xFF, v&0xFF] };
+    return { bytes:[v&0xFF, (v>>8)&0xFF] };
+  }
+
+  return { err:'Unsupported value width' };
+}
+
 function buildBmsHex(){
-  const sel=$('bmsCmdSelect'), hexEl=$('bmsCmdHex'), valEl=$('bmsCmdValue');
+  const sel=$('bmsCmdSelect'), hexEl=$('bmsCmdHex'), valEl=$('bmsCmdValue'), desc=$('bmsCmdDesc');
   if(!sel||!hexEl) return;
   const idx=parseInt(sel.value,10); if(isNaN(idx)){hexEl.value='';return;}
   const cmd=BMS_COMMANDS[idx];
-  const s=(valEl?.value||'').trim();
-  const value=cmd.fixed!==undefined?cmd.fixed:(s?parseInt(s.startsWith('0x')?s:s,s.startsWith('0x')?16:10)&0xFFFF:null);
-  if(value==null){hexEl.value='';return;}
-  hexEl.value=[...cmd.base,(value>>8)&0xFF,value&0xFF].map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+
+  const value = (cmd.fixed!==undefined) ? cmd.fixed : parseBmsInputValue(valEl?.value);
+  if(value==null){ hexEl.value=''; return; }
+
+  const enc = encodeBmsValue(cmd, value);
+  if(enc.err){
+    hexEl.value='';
+    if(desc) desc.textContent=(cmd.desc||'')+' | '+enc.err;
+    return;
+  }
+
+  const payload=[...cmd.base, ...enc.bytes];
+  hexEl.value=payload.map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+
+  if(desc && cmd.bytes===1 && cmd.fixed===undefined){
+    desc.textContent=(cmd.desc||'')+' | Documented assumption: 1-byte write length';
+  }
 }
 
 async function sendBmsCommand(){
