@@ -202,7 +202,7 @@ async function connectBle() {
   try {
     log("Searching BLE devices...");
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: DEVICE_NAME_PREFIX }],
+      acceptAllDevices: true,
       optionalServices: [SERVICE_UUID],
     });
     device.addEventListener("gattserverdisconnected", onDisconnected);
