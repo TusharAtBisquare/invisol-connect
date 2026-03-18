@@ -3,7 +3,7 @@
 
 /* ── BLE CONFIG ──────────────────────────────────────────── */
 const SVC_UUID = 0xFFF0, CMD_UUID = 0xFFF1, TX_UUID = 0xFFF2;
-const POLL_MS  = 1500;
+const POLL_MS  = 2000;
 const PH       = '&#8212;';
 
 /* ── COMMAND DATABASE (replaces commands.csv) ──────────────── */
@@ -103,6 +103,8 @@ let connected=false, invPolling=true, bmsPolling=true;
 let rxBuffer='', pollTimer=null, deferredInstall=null;
 let commandHistory=[], rawLogLines=[], bmsLogLines=[];
 let lastTelemetry=null, lastBmsTelemetry=null;
+let lastGoodInvTs=0;   // timestamp of last connected=true inv telemetry
+let lastCorrLogTs=0;   // timestamp of last BMS-INV correlation log
 let activeFlowNode='inverter';
 
 /* ── DOM ─────────────────────────────────────────────────── */
@@ -116,6 +118,8 @@ function escapeHtml(s){
 }
 
 function fmtNum(v,dec){ if(v==null||v===''||isNaN(+v))return'&#8212;'; return dec==null?String(v):(+v).toFixed(dec); }
+/* like fmtNum but strips trailing .0 / .00 — use for current, energy, etc. */
+function fmtClean(v,maxDec){ if(v==null||v===''||isNaN(+v))return'&#8212;'; return String(parseFloat((+v).toFixed(maxDec))); }
 
 function setM(id,v,dec){
   const el=$(id); if(!el)return;
@@ -256,13 +260,19 @@ function applyTelemetry(o){
   }
 
   if(!invOnline){
-    /* inverter UART has no data — clear all metrics to dashes */
-    const dash=()=>null;
+    /* inverter UART offline — sustain last good values for 10s before clearing */
+    const staleMs = Date.now() - lastGoodInvTs;
+    if(staleMs < 10000 && lastGoodInvTs > 0){
+      /* still within sustain window: just show the badge, keep metric values */
+      if(ib){ ib.textContent='INV: OFFLINE'; ib.style.background='var(--accent-amber)'; }
+      addRawLog('RX','TEL inv OFFLINE (sustaining last data, '+Math.round(staleMs/1000)+'s ago)');
+      return;
+    }
+    /* beyond sustain window — clear all metrics to dashes */
     ['m_grid_v','m_grid_f','m_out_v','m_out_f','m_out_w','m_out_va',
      'm_load_pct','m_bus_v','m_bat_v','m_bat_scc','m_bat_cap',
      'm_chg_a','m_dis_a','m_temp','m_pv_v','m_pv_a','m_pv_w'
     ].forEach(id=>{ const el=$(id); if(el) el.innerHTML='&#8212;'; });
-
     $('statusFlags').innerHTML='<span style="color:var(--accent-amber)">&#9888; Inverter UART offline — no data</span>';
     $('modeBadge').className='mode-badge mode-S';
     $('modeIcon').innerHTML='&#9888;';
@@ -274,6 +284,7 @@ function applyTelemetry(o){
     addRawLog('RX','TEL inv OFFLINE (UART not connected)');
     return;
   }
+  lastGoodInvTs = Date.now();
 
   /* map BLE fields to SoftAP metric IDs */
   setM('m_grid_v',  o.grid_v,  1); setM('m_grid_f',  o.grid_hz, 1);
@@ -313,7 +324,8 @@ function applyTelemetry(o){
   const fb=$('flowStatus'); if(fb) fb.textContent=(o.mode_name||'LIVE').toUpperCase();
 
   updateFlow(o);
-  addRawLog('RX','TEL inv mode='+o.mode_name+' pv='+fmtNum(o.pv_w,0)+'W out='+fmtNum(o.out_w,0)+'W');
+  addRawLog('RX','TEL inv mode='+o.mode_name+' pv='+fmtNum(o.pv_w,0)+'W grid='+fmtNum(o.grid_v,1)+'V out='+fmtNum(o.out_w,0)+'W bat='+fmtNum(o.bat_v,1)+'V soc='+fmtNum(o.bat_soc,0)+'% temp='+fmtNum(o.inv_temp,1)+'°C');
+  logCorrelation();
 }
 
 /* ── BMS TELEMETRY → same structure as SoftAP applyBmsTelemetry ── */
@@ -331,11 +343,13 @@ function applyBmsTelemetry(o){
 
   /* map BLE field names to SoftAP IDs */
   setM('bms_pack_v',    o.pack_v,   2);
-  setM('bms_current',   o.current,  2);
+  /* current: remove trailing .00 — e.g. show 2.5 not 2.50, 100 not 100.00 */
+  const curEl=$('bms_current'); if(curEl){ curEl.innerHTML=fmtClean(o.current,1); curEl.classList.remove('value-update'); void curEl.offsetWidth; curEl.classList.add('value-update'); }
   setM('bms_soc',       o.soc,      0);
   setM('bms_soh',       o.soh,      0);
   setM('bms_cap_left',  o.cap_left, 1);
-  setM('bms_energy_left',o.energy_left,2);
+  /* energy_left in Wh, no decimals */
+  const enEl=$('bms_energy_left'); if(enEl){ enEl.innerHTML=fmtClean(o.energy_left,0); enEl.classList.remove('value-update'); void enEl.offsetWidth; enEl.classList.add('value-update'); }
   setM('bms_cycles',    o.cycles,   0);
   setM('bms_min_cell_v',o.min_cell_v,3);
   setM('bms_max_cell_v',o.max_cell_v,3);
@@ -353,7 +367,7 @@ function applyBmsTelemetry(o){
   if(o.flags){
     const f=o.flags;
     const parts=[]; if(f.ca_on)parts.push('Charging'); if(f.load)parts.push('Load'); if(f.balancing)parts.push('Balancing');
-    const se=$('bms_state'); if(se) se.textContent=parts.length?parts.join(' | '):'Idle';
+    const se=$('bms_state'); if(se) se.textContent=(parts.length?parts.join(' | '):'Idle').toUpperCase();
     $('bmsFlags').innerHTML=[chip('Balancing',f.balancing),chip('MOSFET Fail',f.mosfet_fail),chip('CA ON',f.ca_on),chip('Load',f.load)].join('');
   }
 
@@ -365,12 +379,13 @@ function applyBmsTelemetry(o){
     ).join('');
   }
 
-  /* cell temperatures */
+  /* cell temperatures — only show sensors with actual data (non-zero) */
   const tempsEl=$('bmsTemps');
-  if(tempsEl&&Array.isArray(o.cell_t)&&o.cell_t.length){
-    tempsEl.innerHTML=o.cell_t.map((t,i)=>
-      `<div class="bms-item"><div class="label">Temp ${i+1}</div><div class="value">${(+t).toFixed(1)} °C</div></div>`
-    ).join('');
+  if(tempsEl&&Array.isArray(o.cell_t)){
+    const validTemps=o.cell_t.map((t,i)=>({t,i})).filter(x=>+x.t!==0&&x.t!=null);
+    tempsEl.innerHTML=validTemps.length
+      ? validTemps.map(x=>`<div class="bms-item"><div class="label">Temp ${x.i+1}</div><div class="value">${(+x.t).toFixed(1)} °C</div></div>`).join('')
+      : '<div class="bms-item"><div class="label">No temp sensors</div><div class="value">—</div></div>';
   }
 
   /* raw frame */
@@ -384,7 +399,57 @@ function applyBmsTelemetry(o){
   if(lastTelemetry) updateFlow(lastTelemetry);
   if(lastTelemetry) renderFlowDetails();
 
-  addRawLog('RX','BMS pack='+fmtNum(o.pack_v,2)+'V soc='+fmtNum(o.soc,0)+'%');
+  addRawLog('RX','TEL bms pack='+fmtNum(o.pack_v,2)+'V soc='+fmtNum(o.soc,0)+'% soh='+fmtNum(o.soh,0)+'% cur='+fmtClean(o.current,1)+'A cells='+fmtNum(o.cell_count,0)+' minV='+fmtNum(o.min_cell_v,3)+'V maxV='+fmtNum(o.max_cell_v,3)+'V');
+  logCorrelation();
+}
+
+/* ── BMS-INV CORRELATION LOG ─────────────────────────────── */
+function logCorrelation(){
+  const now=Date.now();
+  if(now-lastCorrLogTs < 10000) return; // log at most every 10s
+  lastCorrLogTs=now;
+  const inv=lastTelemetry, bms=lastBmsTelemetry;
+  if(!inv&&!bms) return;
+  let line='[CORRELATION] ';
+  if(inv&&inv.connected!==false){
+    line+='INV: mode='+( inv.mode_name||'?')+' pv='+fmtNum(inv.pv_w,0)+'W out='+fmtNum(inv.out_w,0)+'W grid='+fmtNum(inv.grid_v,1)+'V bat='+fmtNum(inv.bat_v,1)+'V(inv)';
+  } else { line+='INV: OFFLINE'; }
+  if(bms){
+    line+=' | BMS: pack='+fmtNum(bms.pack_v,2)+'V soc='+fmtNum(bms.soc,0)+'% cur='+fmtClean(bms.current,1)+'A';
+    if(Array.isArray(bms.warnings)&&bms.warnings.length) line+=' WARN:'+bms.warnings.join(',');
+  } else { line+=' | BMS: no data'; }
+  addRawLog('INF',line);
+}
+
+/* ── BMS THRESHOLD DECODER ───────────────────────────────── */
+/* Decodes #val1#val2...& ASCII response from Get Thresholds command */
+const BMS_THR_LABELS=[
+  'Reserved','Cell Count','Factory Capacity (Ah)','Balance Trigger (mV)','Cell OVP (mV)',
+  'Cell OVP-R (mV)','Charge OCP (A)','Charge OTP (°C)','Charge OTP-R (°C)','Cell UVP (mV)',
+  'Cell UVP-R (mV)','Discharge OCP (A)','Discharge OTP (°C)','Discharge OTP-R (°C)',
+  'Sleep Hour','Sleep Minute','Sleep Enable','Reserved','Reserved','Max SOC (%)',
+  'Cell V Min (mV)','Cell V Max (mV)','Reserved','Reserved','Temp (×0.01°C)',
+  'Max Charge A','Cell Count Act','Reserved','Full SOC (%)','Reserved',
+  'Capacity (Wh)','Reserved','Capacity Full (mWh)','Temp Threshold (°C)','SOC (%)',
+  'Reserved','Reserved','Discharge Cutoff (mV)','Reserved','Reserved',
+  'Reserved','Reserved','Reserved','Reserved','Reserved','Reserved','Reserved','Reserved'
+];
+function decodeBmsThreshold(hexStr){
+  /* hexStr is the resp_hex field from bms_resp which is either raw hex bytes or the ASCII text */
+  /* Try to extract #val#val...& pattern directly from ASCII */
+  const m=hexStr.match(/#([\d#]+)&/);
+  if(!m) return null;
+  const vals=m[1].split('#').map(Number);
+  return vals.map((v,i)=>({label:BMS_THR_LABELS[i]||('Field '+i),raw:v,idx:i}));
+}
+
+function renderThresholdTable(fields){
+  if(!fields) return null;
+  const rows=fields.filter(f=>f.raw!==0||f.idx<5).map(f=>
+    `<tr><td style="color:var(--text-muted);padding:3px 10px 3px 0;font-size:11px;">${f.label}</td>`+
+    `<td style="font-family:var(--mono);color:var(--accent-cyan);font-size:12px;">${f.raw}</td></tr>`
+  ).join('');
+  return `<div style="overflow-y:auto;max-height:260px;"><table style="border-collapse:collapse;width:100%;">${rows}</table></div>`;
 }
 
 /* ── FLOW DIAGRAM ────────────────────────────────────────── */
@@ -480,13 +545,49 @@ function handleInvResp(obj){
 
 /* ── BMS RESPONSE ────────────────────────────────────────── */
 function handleBmsResp(obj){
-  const text=obj.success?obj.resp_hex:('ERROR: '+( obj.error||'failed'));
-  addRawLog(obj.success?'RX':'ERR','BMS '+obj.mode+' => '+text);
+  const text=obj.success?obj.resp_hex:('ERROR: '+(obj.error||'failed'));
+  /* log full response to raw log */
+  addRawLog(obj.success?'RX':'ERR','BMS-CMD ['+obj.mode+'] '+text);
   const el=$('bmsCmdResponse'); if(!el) return;
   if(el.querySelector('[style*="color:var(--text-muted)"]')) el.innerHTML='';
-  el.innerHTML+=`<div class="console-line"><span class="console-dir rx">RX</span><span class="console-data">[${escapeHtml(obj.mode)}] ${escapeHtml(text)}</span></div>`;
-  el.scrollTop=el.scrollHeight;
-  if(obj.success&&obj.resp_hex) addBmsLog(obj.resp_hex);
+
+  if(!obj.success){
+    el.innerHTML+=`<div class="console-line"><span class="console-dir err">ERR</span><span class="console-data" style="color:var(--accent-red);">[${escapeHtml(obj.mode)}] ${escapeHtml(text)}</span></div>`;
+    logScrollBottom(el);
+    addBmsLog('ERR: ['+obj.mode+'] '+text);
+    return;
+  }
+
+  /* show raw hex line */
+  el.innerHTML+=`<div class="console-line"><span class="console-dir rx">RX</span><span class="console-data">[${escapeHtml(obj.mode)}] <span style="font-size:10px;color:var(--text-muted);">${escapeHtml(text)}</span></span></div>`;
+
+  /* try to decode ASCII threshold response #val#val...& */
+  const asciiStr=hexToAscii(text);
+  const thrFields=decodeBmsThreshold(asciiStr||text);
+  if(thrFields){
+    const table=renderThresholdTable(thrFields);
+    if(table){
+      el.innerHTML+=`<div style="margin:6px 0 4px;padding:6px 10px;background:#050a14;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div style="font-size:11px;color:var(--accent-amber);margin-bottom:4px;">&#9881; Decoded Threshold Values:</div>${table}</div>`;
+      addRawLog('INF','BMS threshold decoded: '+thrFields.filter(f=>f.raw!==0).map(f=>f.label+'='+f.raw).join(', '));
+    }
+  } else if(asciiStr){
+    el.innerHTML+=`<div class="console-line"><span class="console-dir rx" style="color:var(--accent-green);">ASCII</span><span class="console-data">${escapeHtml(asciiStr)}</span></div>`;
+    addRawLog('INF','BMS ASCII: '+asciiStr);
+  }
+
+  logScrollBottom(el);
+  addBmsLog('['+obj.mode+'] '+(asciiStr||text));
+}
+
+/* Convert hex string "02 06 9B..." to ASCII where printable */
+function hexToAscii(hexStr){
+  if(!hexStr||!hexStr.match(/^[0-9a-fA-F ]+$/)) return null;
+  try{
+    const bytes=hexStr.trim().split(/\s+/).map(h=>parseInt(h,16));
+    const s=bytes.map(b=>b>=32&&b<127?String.fromCharCode(b):'.').join('');
+    return s.includes('#')?bytes.map(b=>String.fromCharCode(b)).join('').replace(/[^\x20-\x7e#&]/g,''):null;
+  }catch{return null;}
 }
 
 /* ── SEND COMMAND (Commands tab) ─────────────────────────── */
@@ -555,8 +656,15 @@ function buildInvQuickSettings(){
 }
 
 async function sendInvQuick(cmd,param,idx){
+  const s=INV_QUICK_SETTINGS[idx];
   const full=cmd+param;
-  try{ addRawLog('TX',full); await writeLine('INV '+full); }
+  /* confirmation dialog */
+  const descLabel=s?s.desc:cmd;
+  let paramLabel=param;
+  if(s&&s.opts){ const opt=s.opts.find(o=>o.startsWith(param+':')); if(opt) paramLabel=opt.split(':').slice(1).join(':'); }
+  const msg=`Set [${cmd}] — ${descLabel}\n\nCommand: ${full}\nNew value: ${paramLabel||param||'(execute)'}\n\nSend this command?`;
+  if(!confirm(msg)) return;
+  try{ addRawLog('TX','INV '+full+' (quick setting: '+descLabel+')'); await writeLine('INV '+full); }
   catch(e){ addRawLog('ERR',e.message); }
 }
 
@@ -635,8 +743,13 @@ function buildBmsHex(){
 async function sendBmsCommand(){
   const hex=($('bmsCmdHex')?.value||'').trim();
   if(!hex){alert('Select a BMS command first.');return;}
-  try{ addRawLog('TX','BMSHEX '+hex); await writeLine('BMSHEX '+hex); }
-  catch(e){ addRawLog('ERR',e.message); }
+  const sel=$('bmsCmdSelect'); const idx=parseInt(sel?.value,10);
+  const label=!isNaN(idx)&&BMS_COMMANDS[idx]?BMS_COMMANDS[idx].label:'BMS CMD';
+  try{
+    addRawLog('TX','BMSHEX ['+label+'] '+hex);
+    addBmsLog('TX: ['+label+'] '+hex);
+    await writeLine('BMSHEX '+hex);
+  }catch(e){ addRawLog('ERR',e.message); }
 }
 
 async function sendBmsAscii(ascii,btnId){
@@ -683,30 +796,37 @@ async function toggleBmsPoll(){
 }
 
 /* ── LOGGING ─────────────────────────────────────────────── */
+/* Only auto-scroll to bottom if user is already at/near bottom (within 60px) */
+function logScrollBottom(el){
+  if(!el) return;
+  if(el.scrollTop + el.clientHeight >= el.scrollHeight - 60) el.scrollTop=el.scrollHeight;
+}
+
 function addRawLog(dir,text){
   rawLogLines.push({ts:tsNow(),dir,text});
-  if(rawLogLines.length>500) rawLogLines.shift();
+  if(rawLogLines.length>1000) rawLogLines.shift();
   const el=$('rawLog'); if(!el) return;
   const d=document.createElement('div'); d.className='console-line';
-  d.innerHTML=`<span class="console-ts">${tsNow()}</span><span class="console-dir ${dir.toLowerCase()}">${dir}</span><span class="console-data">${escapeHtml(text)}</span>`;
-  el.appendChild(d); el.scrollTop=el.scrollHeight;
+  const dirCls=dir==='INF'?'rx':dir.toLowerCase();
+  d.innerHTML=`<span class="console-ts">${tsNow()}</span><span class="console-dir ${dirCls}">${dir}</span><span class="console-data">${escapeHtml(text)}</span>`;
+  el.appendChild(d); logScrollBottom(el);
 }
 
 function addBleLog(text,dir='tx'){
   const el=$('bleLog'); if(!el) return;
   const d=document.createElement('div'); d.className='console-line';
   d.innerHTML=`<span class="console-ts">${tsNow()}</span><span class="console-dir ${dir}">${dir.toUpperCase()}</span><span class="console-data">${escapeHtml(text)}</span>`;
-  el.appendChild(d); el.scrollTop=el.scrollHeight;
+  el.appendChild(d); logScrollBottom(el);
   addRawLog(dir.toUpperCase(),text);
 }
 
 function addBmsLog(text){
   bmsLogLines.push({ts:tsNow(),text});
-  if(bmsLogLines.length>300) bmsLogLines.shift();
+  if(bmsLogLines.length>500) bmsLogLines.shift();
   const el=$('bmsLog'); if(!el) return;
   const d=document.createElement('div'); d.className='console-line';
   d.innerHTML=`<span class="console-ts">${tsNow()}</span><span class="console-dir rx">RX</span><span class="console-data">${escapeHtml(text)}</span>`;
-  el.appendChild(d); el.scrollTop=el.scrollHeight;
+  el.appendChild(d); logScrollBottom(el);
 }
 
 function clearBmsLog(){ bmsLogLines=[]; const e=$('bmsLog'); if(e) e.innerHTML=''; }
